@@ -1,0 +1,11 @@
+﻿{
+  "files": [],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/api" },
+    { "path": "./packages/frontend" }
+  ],
+  "compilerOptions": {
+    "skipLibCheck": true
+  }
+}

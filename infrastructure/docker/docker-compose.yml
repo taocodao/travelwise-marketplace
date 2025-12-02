@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: travelwise-postgres
+    environment:
+      POSTGRES_USER: travelwise
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: travelwise_marketplace
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travelwise"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: travelwise-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  api:
+    build:
+      context: ../../packages/api
+      dockerfile: ../../infrastructure/docker/api.Dockerfile
+    container_name: travelwise-api
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://travelwise:${DB_PASSWORD}@postgres:5432/travelwise_marketplace
+      REDIS_URL: redis://redis:6379
+      BASE_SEPOLIA_RPC: ${BASE_SEPOLIA_RPC}
+      OPERATOR_PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY}
+      IDENTITY_REGISTRY_ADDRESS: ${IDENTITY_REGISTRY_ADDRESS}
+      REPUTATION_REGISTRY_ADDRESS: ${REPUTATION_REGISTRY_ADDRESS}
+      PAYMENT_ESCROW_ADDRESS: ${PAYMENT_ESCROW_ADDRESS}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Google Maps MCP Server
+  mcp-google-maps:
+    build:
+      context: ../../packages/mcp-servers/google-maps
+      dockerfile: ../../../infrastructure/docker/mcp.Dockerfile
+    container_name: travelwise-mcp-maps
+    environment:
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+    restart: unless-stopped
+
+  # Weather MCP Server
+  mcp-weather:
+    build:
+      context: ../../packages/mcp-servers/weather
+      dockerfile: ../../../infrastructure/docker/mcp.Dockerfile
+    container_name: travelwise-mcp-weather
+    environment:
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+    restart: unless-stopped
+
+  # Travel Agent MCP Server
+  mcp-travel-agent:
+    build:
+      context: ../../packages/mcp-servers/travel-agent
+      dockerfile: ../../../infrastructure/docker/mcp.Dockerfile
+    container_name: travelwise-mcp-agent
+    environment:
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+    depends_on:
+      - mcp-google-maps
+      - mcp-weather
+    restart: unless-stopped
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ../../packages/frontend
+      dockerfile: ../../infrastructure/docker/frontend.Dockerfile
+    container_name: travelwise-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:3001
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${WALLETCONNECT_PROJECT_ID}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:

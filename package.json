@@ -1,0 +1,42 @@
+{
+  "name": "travelwise-marketplace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "packages/mcp-servers/*"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run install:packages",
+    "install:packages": "npm install --workspaces",
+    "build:all": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=packages/api",
+    "dev:frontend": "npm run dev --workspace=packages/frontend",
+    "dev:contracts": "npm run compile --workspace=packages/contracts",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "clean": "Get-ChildItem -Path . -Include node_modules,dist,build,.next -Recurse -Directory | Remove-Item -Recurse -Force"
+  },
+  "devDependencies": {
+    "@types/minimatch": "^6.0.0",
+    "@types/node": "^24.10.1",
+    "dotenv": "^17.2.3",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3",
+     "prisma": "5.22.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "cors": "^2.8.5",
+    "ethers": "^6.15.0",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.1",
+    "zod": "^4.1.13"
+  }
+}

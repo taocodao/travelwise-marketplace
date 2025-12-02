@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id            String   @id @default(uuid())
+  onChainId     Int      @unique
+  name          String
+  walletAddress String   @unique
+  metadataUri   String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mcpServers    MCPServer[]
+  executions    Execution[]
+  
+  @@index([walletAddress])
+  @@index([onChainId])
+}
+
+model MCPServer {
+  id          String   @id @default(uuid())
+  agentId     String
+  name        String
+  description String
+  endpoint    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tools       Tool[]
+  executions  Execution[]
+
+  @@index([agentId])
+  @@index([endpoint])
+}
+
+model Tool {
+  id           String   @id @default(uuid())
+  mcpServerId  String
+  name         String
+  description  String
+  baseCost     Decimal  @db.Decimal(10, 6) // Cost in USDC
+  inputSchema  Json
+  outputSchema Json?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  mcpServer    MCPServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  executions   Execution[]
+
+  @@unique([mcpServerId, name])
+  @@index([mcpServerId])
+}
+
+model Execution {
+  id              String   @id @default(uuid())
+  agentId         String
+  mcpServerId     String
+  toolId          String
+  input           Json
+  output          Json?
+  baseCost        Decimal  @db.Decimal(10, 6)
+  margin          Decimal  @db.Decimal(10, 6)
+  totalCost       Decimal  @db.Decimal(10, 6)
+  paymentTxHash   String?
+  paymentStatus   PaymentStatus @default(PENDING)
+  executionStatus ExecutionStatus @default(PENDING)
+  errorMessage    String?
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  agent           Agent    @relation(fields: [agentId], references: [id])
+  mcpServer       MCPServer @relation(fields: [mcpServerId], references: [id])
+  tool            Tool     @relation(fields: [toolId], references: [id])
+
+  @@index([agentId])
+  @@index([paymentTxHash])
+  @@index([paymentStatus])
+}
+
+model PricingConfig {
+  id            String   @id @default(uuid())
+  marginPercent Decimal  @default(20) @db.Decimal(5, 2) // Default 20%
+  platformFee   Decimal  @default(1) @db.Decimal(5, 2)  // Default 1%
+  updatedAt     DateTime @updatedAt
+  updatedBy     String   // Admin wallet address
+
+  @@map("pricing_config")
+}
+
+model WalletConfig {
+  id             String   @id @default(uuid())
+  operatorWallet String   @unique
+  escrowContract String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("wallet_config")
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  SETTLED
+  REFUNDED
+  FAILED
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
