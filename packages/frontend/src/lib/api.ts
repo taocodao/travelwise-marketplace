@@ -1,104 +1,95 @@
-import axios from 'axios';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+class ApiClient {
+  private baseURL: string;
 
-export const api = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+  constructor(baseURL: string) {
+    this.baseURL = baseURL;
+  }
 
-// Admin API
-export const adminAPI = {
-  // Wallet configuration
-  configureWallet: async (operatorWallet: string, escrowContract: string) => {
-    const response = await api.post('/admin/wallet/configure', {
-      operatorWallet,
-      escrowContract,
+  async get<T = any>(endpoint: string): Promise<T> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
-    return response.data;
-  },
 
-  getWalletConfig: async () => {
-    const response = await api.get('/admin/wallet/config');
-    return response.data;
-  },
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
 
-  // Pricing configuration
-  configurePricing: async (marginPercent: number, platformFee: number, updatedBy: string) => {
-    const response = await api.post('/admin/pricing/configure', {
-      marginPercent,
-      platformFee,
-      updatedBy,
+    return response.json();
+  }
+
+  async post<T = any>(endpoint: string, data: any): Promise<T> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
     });
-    return response.data;
-  },
 
-  getPricingConfig: async () => {
-    const response = await api.get('/admin/pricing/config');
-    return response.data;
-  },
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
 
-  // Tool pricing
-  updateToolPricing: async (toolId: string, baseCost: number) => {
-    const response = await api.put('/admin/pricing/tool', {
-      toolId,
-      baseCost,
+    return response.json();
+  }
+
+  async put<T = any>(endpoint: string, data: any): Promise<T> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
     });
-    return response.data;
-  },
 
-  getAllTools: async () => {
-    const response = await api.get('/admin/pricing/tools');
-    return response.data;
-  },
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
 
-  // Dashboard stats
-  getDashboardStats: async () => {
-    const response = await api.get('/admin/dashboard/stats');
-    return response.data;
-  },
-};
+    return response.json();
+  }
 
-// Marketplace API
-export const marketplaceAPI = {
-  getAgents: async (filters?: { specialization?: string; minReputation?: number }) => {
-    const response = await api.get('/marketplace/agents', { params: filters });
-    return response.data;
-  },
-
-  getAgentDetails: async (agentId: string) => {
-    const response = await api.get(`/marketplace/agents/${agentId}`);
-    return response.data;
-  },
-
-  getToolPricing: async (toolId: string) => {
-    const response = await api.get(`/marketplace/pricing/${toolId}`);
-    return response.data;
-  },
-};
-
-// Payment API
-export const paymentAPI = {
-  getPaymentRequirements: async (toolId: string, agentId: string) => {
-    const response = await api.post('/payments/requirements', {
-      toolId,
-      agentId,
+  async delete<T = any>(endpoint: string): Promise<T> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
-    return response.data;
-  },
 
-  verifyPayment: async (paymentHeader: string, executionId: string) => {
-    const response = await api.post('/payments/verify', {
-      paymentHeader,
-      executionId,
-    });
-    return response.data;
-  },
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
 
-  settlePayment: async (executionId: string) => {
-    const response = await api.post(`/payments/settle/${executionId}`);
-    return response.data;
-  },
-};
+    return response.json();
+  }
+
+  // Admin-specific helper methods
+  async getDashboardStats() {
+    return this.get('/admin/stats');
+  }
+
+  async getAgents() {
+    return this.get('/admin/agents');
+  }
+
+  async createAgent(data: any) {
+    return this.post('/admin/agents', data);
+  }
+
+  async updateAgent(id: string, data: any) {
+    return this.put(`/admin/agents/${id}`, data);
+  }
+
+  async deleteAgent(id: string) {
+    return this.delete(`/admin/agents/${id}`);
+  }
+}
+
+export const api = new ApiClient(API_BASE_URL);
+export const adminAPI = new ApiClient(API_BASE_URL);
