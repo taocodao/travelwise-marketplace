@@ -1,17 +1,26 @@
 ﻿import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { BlockchainService } from '../services/blockchain.service';
-import { Agent } from '@prisma/client';
 
 const router = Router();
 const prisma = new PrismaClient();
 const blockchainService = new BlockchainService();
 
+// Define agent type with relations using Prisma utility type
+type AgentWithServers = Prisma.AgentGetPayload<{
+  include: {
+    mcpServers: {
+      include: {
+        tools: true
+      }
+    }
+  }
+}>;
+
 // ══════════════════════════════════════════════════════
 // DISCOVER AGENTS
 // ══════════════════════════════════════════════════════
-
 router.get('/agents', async (req: Request, res: Response) => {
   try {
     const { specialization, minReputation } = req.query;
@@ -32,11 +41,10 @@ router.get('/agents', async (req: Request, res: Response) => {
       },
     });
 
-    // Enrich with on-chain reputation
+    // Enrich with on-chain reputation - TypeScript infers the type from agents array
     const enrichedAgents = await Promise.all(
-      agents.map(async (agent:Agent) => {
+      agents.map(async (agent) => {
         const reputation = await blockchainService.getReputation(agent.onChainId);
-        
         return {
           ...agent,
           reputation: {
@@ -49,7 +57,6 @@ router.get('/agents', async (req: Request, res: Response) => {
 
     // Filter by criteria
     let filtered = enrichedAgents;
-    
     if (minReputation) {
       filtered = filtered.filter(
         (a) => a.reputation.score >= parseInt(minReputation as string)
@@ -70,7 +77,6 @@ router.get('/agents', async (req: Request, res: Response) => {
 // ══════════════════════════════════════════════════════
 // GET AGENT DETAILS
 // ══════════════════════════════════════════════════════
-
 router.get('/agents/:agentId', async (req: Request, res: Response) => {
   try {
     const { agentId } = req.params;
@@ -115,7 +121,6 @@ router.get('/agents/:agentId', async (req: Request, res: Response) => {
 // ══════════════════════════════════════════════════════
 // GET PRICING FOR TOOL
 // ══════════════════════════════════════════════════════
-
 router.get('/pricing/:toolId', async (req: Request, res: Response) => {
   try {
     const { toolId } = req.params;
@@ -141,21 +146,21 @@ router.get('/pricing/:toolId', async (req: Request, res: Response) => {
     });
 
     // Convert Decimal values to numbers for calculations
-    const marginPercent = pricingConfig?.marginPercent 
-      ? (pricingConfig.marginPercent instanceof Decimal 
-          ? pricingConfig.marginPercent.toNumber() 
-          : Number(pricingConfig.marginPercent))
+    const marginPercent = pricingConfig?.marginPercent
+      ? (pricingConfig.marginPercent instanceof Decimal
+        ? pricingConfig.marginPercent.toNumber()
+        : Number(pricingConfig.marginPercent))
       : 20;
 
     const platformFeePercent = pricingConfig?.platformFee
       ? (pricingConfig.platformFee instanceof Decimal
-          ? pricingConfig.platformFee.toNumber()
-          : Number(pricingConfig.platformFee))
+        ? pricingConfig.platformFee.toNumber()
+        : Number(pricingConfig.platformFee))
       : 1;
 
     // Convert baseCost Decimal to number
-    const baseCost = tool.baseCost instanceof Decimal 
-      ? tool.baseCost.toNumber() 
+    const baseCost = tool.baseCost instanceof Decimal
+      ? tool.baseCost.toNumber()
       : Number(tool.baseCost);
 
     // Perform calculations with numbers
@@ -190,15 +195,14 @@ router.get('/pricing/:toolId', async (req: Request, res: Response) => {
 // ══════════════════════════════════════════════════════
 // CREATE EXECUTION (Tool Usage)
 // ══════════════════════════════════════════════════════
-
 router.post('/executions', async (req: Request, res: Response) => {
   try {
     const { toolId, input } = req.body;
 
     // Validate required fields
     if (!toolId || !input) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: toolId, input' 
+      return res.status(400).json({
+        error: 'Missing required fields: toolId, input'
       });
     }
 
@@ -223,17 +227,17 @@ router.post('/executions', async (req: Request, res: Response) => {
       orderBy: { updatedAt: 'desc' },
     });
 
-    const marginPercent = pricingConfig?.marginPercent 
-      ? (pricingConfig.marginPercent instanceof Decimal 
-          ? pricingConfig.marginPercent.toNumber() 
-          : Number(pricingConfig.marginPercent))
+    const marginPercent = pricingConfig?.marginPercent
+      ? (pricingConfig.marginPercent instanceof Decimal
+        ? pricingConfig.marginPercent.toNumber()
+        : Number(pricingConfig.marginPercent))
       : 20;
 
     // Calculate pricing
-    const baseCost = tool.baseCost instanceof Decimal 
-      ? tool.baseCost.toNumber() 
+    const baseCost = tool.baseCost instanceof Decimal
+      ? tool.baseCost.toNumber()
       : Number(tool.baseCost);
-    
+
     const marginAmount = baseCost * (marginPercent / 100);
     const totalCost = baseCost + marginAmount;
 
@@ -265,13 +269,9 @@ router.post('/executions', async (req: Request, res: Response) => {
   }
 });
 
-
-
-
 // ══════════════════════════════════════════════════════
 // GET EXECUTION STATUS
 // ══════════════════════════════════════════════════════
-
 router.get('/executions/:executionId', async (req: Request, res: Response) => {
   try {
     const { executionId } = req.params;
@@ -301,7 +301,6 @@ router.get('/executions/:executionId', async (req: Request, res: Response) => {
 // ══════════════════════════════════════════════════════
 // GET PRICING CONFIG
 // ══════════════════════════════════════════════════════
-
 router.get('/config/pricing', async (req: Request, res: Response) => {
   try {
     const config = await prisma.pricingConfig.findFirst({
@@ -321,8 +320,8 @@ router.get('/config/pricing', async (req: Request, res: Response) => {
     res.json({
       success: true,
       config: {
-        marginPercent: config.marginPercent instanceof Decimal 
-          ? config.marginPercent.toNumber() 
+        marginPercent: config.marginPercent instanceof Decimal
+          ? config.marginPercent.toNumber()
           : Number(config.marginPercent),
         platformFee: config.platformFee instanceof Decimal
           ? config.platformFee.toNumber()
