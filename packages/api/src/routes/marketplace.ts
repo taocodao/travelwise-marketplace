@@ -2,6 +2,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { BlockchainService } from '../services/blockchain.service';
+import { Agent } from '@prisma/client';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -33,7 +34,7 @@ router.get('/agents', async (req: Request, res: Response) => {
 
     // Enrich with on-chain reputation
     const enrichedAgents = await Promise.all(
-      agents.map(async (agent) => {
+      agents.map(async (agent:Agent) => {
         const reputation = await blockchainService.getReputation(agent.onChainId);
         
         return {
