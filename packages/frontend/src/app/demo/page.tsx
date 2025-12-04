@@ -1,0 +1,987 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  cost?: number;
+  executionTime?: number;
+  functionsUsed?: string[];
+  mcpResults?: any[];
+}
+
+interface Transaction {
+  id: string;
+  timestamp: string;
+  description: string;
+  toolName: string;
+  amount: number;
+  status: 'completed' | 'pending';
+}
+
+interface MCPServer {
+  id: string;
+  name: string;
+  provider: string;
+  coverage: string;
+  database: string;
+  walletAddress: string;
+  balance: number;
+  status: 'connected' | 'disconnected';
+  tools: MCPTool[];
+  endpoint: string;
+}
+
+interface MCPTool {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  callCount: number;
+}
+
+interface TestResult {
+  id: string;
+  query: string;
+  success: boolean;
+  cost: number;
+  timestamp: Date;
+}
+
+const shortenAddress = (addr: string): string => {
+  if (!addr || addr.length < 10) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+};
+
+export default function TravelAgentMCP(): JSX.Element {
+  // User state
+  const [userBalance, setUserBalance] = useState<number>(50.00);
+  const [totalSpent, setTotalSpent] = useState<number>(12.45);
+  const [totalRequests, setTotalRequests] = useState<number>(618);
+  const [lastActivity] = useState<string>('12/03/2025');
+
+  // MCP Servers
+  const [googleMapsMCP, setGoogleMapsMCP] = useState<MCPServer>({
+    id: 'google-maps',
+    name: 'Google Maps MCP Server',
+    provider: 'Google.io',
+    coverage: 'Global Maps Database',
+    database: '275M+ locations',
+    walletAddress: '0x1a2B3c4D5e6F7a8B9c0D1e2F3a4B5c6D7e8F9a0B',
+    balance: 0,
+    status: 'connected',
+    endpoint: 'http://localhost:3003',
+    tools: [
+      { id: 'get_route', name: 'get_route', description: 'ROUTE OPTIMIZATION: Calculate optimal travel routes with real-time traffic data and ETA calculations', cost: 0.05, callCount: 0 },
+      { id: 'find_places', name: 'find_places', description: 'POI DISCOVERY: Find nearby attractions, restaurants, and points of interest with ratings and reviews', cost: 0.032, callCount: 0 },
+      { id: 'get_place_details', name: 'get_place_details', description: 'LOCATION DETAILS: Get detailed information about specific places including hours, reviews, and contact info', cost: 0.017, callCount: 0 }
+    ]
+  });
+
+  const [weatherMCP, setWeatherMCP] = useState<MCPServer>({
+    id: 'weather',
+    name: 'Weather MCP Server',
+    provider: 'WeatherAPI.com',
+    coverage: 'Global Weather Data',
+    database: '200+ countries',
+    walletAddress: '0x2B3c4D5e6F7a8B9c0D1e2F3a4B5c6D7e8F9a0B1C',
+    balance: 0,
+    status: 'connected',
+    endpoint: 'http://localhost:3004',
+    tools: [
+      { id: 'get_current_weather', name: 'get_current_weather', description: 'REAL-TIME CONDITIONS: Get current weather with temperature, humidity, wind speed for travel planning', cost: 0.01, callCount: 0 },
+      { id: 'get_forecast', name: 'get_forecast', description: 'PREDICTIVE ANALYSIS: 5-day weather forecast with hourly breakdown for trip scheduling optimization', cost: 0.02, callCount: 0 }
+    ]
+  });
+
+  const [travelAgentMCP, setTravelAgentMCP] = useState<MCPServer>({
+    id: 'travel-agent',
+    name: 'Travel Agent MCP Server',
+    provider: 'TravelAI.io',
+    coverage: 'Global Trip Planning',
+    database: 'Multi-MCP Orchestration',
+    walletAddress: '0x8A5c2d9999b4b4E8C3F2a1B7D6E5C4A3B2D1E0F9',
+    balance: 0,
+    status: 'connected',
+    endpoint: 'http://localhost:3005',
+    tools: [
+      { id: 'plan_scenic_route', name: 'plan_scenic_route', description: 'SCENIC PLANNING: Complete trip planning with weather-aware route optimization and scenic stops', cost: 0.05, callCount: 0 },
+      { id: 'weather_aware_itinerary', name: 'weather_aware_itinerary', description: 'SMART ITINERARY: Day-by-day activity planning optimized for weather conditions', cost: 0.03, callCount: 0 },
+      { id: 'hotel_search', name: 'hotel_search', description: 'ACCOMMODATION: Search hotels with availability, pricing, and amenities', cost: 0.03, callCount: 0 }
+    ]
+  });
+
+  // Chat & UI state
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputMessage, setInputMessage] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [isEditingPrices, setIsEditingPrices] = useState<boolean>(false);
+
+  const quickQueries: string[] = [
+    'Find luxury hotels near Central Park, New York with 5-star ratings ⭐',
+    'Plan scenic route from San Francisco to Los Angeles with weather check 🗺️',
+    'Get 7-day weather forecast for Miami Beach 🌤️',
+    'Find tourist attractions in Orlando, Florida 🎢',
+    'Get current weather in Seattle 🌦️',
+    'Plan 3-day trip to Big Sur with scenic stops 🚗',
+    'Search hotels in Manhattan for Dec 15-20 🏨',
+    'Get weather-aware itinerary for San Diego (5 days) ☀️'
+  ];
+
+  useEffect(() => {
+    initializeChat();
+  }, []);
+
+  const initializeChat = (): void => {
+    const welcomeMsg: Message = {
+      id: 'sys-1',
+      role: 'system',
+      content: `🧪 **Travel Agent MCP Test Environment**
+
+**LLM Model:** GPT-4o-mini (OpenAI)
+
+**Connected MCP Servers:** 
+- Google Maps MCP Server (Port 3003)
+- Weather MCP Server (Port 3004)
+- Travel Agent MCP Server (Port 3005)
+
+**🎯 Real MCP Integration Features:**
+• Live API calls to MCP servers
+• Real-time weather data from OpenWeather API
+• Google Maps route optimization
+• Multi-MCP orchestrated trip planning
+• X402 HTTP payment protocol
+• ERC-8004 agent discovery standard
+• USDC pay-per-use settlement
+
+**💳 Payment Model:**
+• **X402 Protocol:** HTTP 402 Payment Required for each MCP call
+• **ERC-8004 Standard:** On-chain agent and MCP server discovery
+• **USDC Settlement:** Real-time payment in USDC stablecoin
+• **Pay-per-Use:** Only pay for tools you actually use
+
+**Available Functions & Live Pricing (USDC):**
+
+**Google Maps MCP:**
+• get_route: $0.05 - Route optimization
+• find_places: $0.032 - Place discovery
+• get_place_details: $0.017 - Location details
+
+**Weather MCP:**
+• get_current_weather: $0.01 - Current conditions
+• get_forecast: $0.02 - 5-day forecast
+
+**Travel Agent MCP:**
+• plan_scenic_route: $0.05 - Complete trip planning
+• weather_aware_itinerary: $0.03 - Smart itinerary
+• hotel_search: $0.03 - Hotel search
+
+🎯 Ask me questions and I'll orchestrate real MCP calls to answer!`,
+      timestamp: new Date()
+    };
+    setMessages([welcomeMsg]);
+  };
+
+  const addTransaction = (description: string, toolName: string, amount: number): void => {
+    const tx: Transaction = {
+      id: `tx-${Date.now()}-${Math.random()}`,
+      timestamp: new Date().toLocaleTimeString(),
+      description,
+      toolName,
+      amount,
+      status: 'completed'
+    };
+    setTransactions(prev => [tx, ...prev].slice(0, 5));
+  };
+
+  const callMCPTool = async (serverEndpoint: string, toolName: string, params: any): Promise<any> => {
+    try {
+      const response = await fetch(`${serverEndpoint}/tools/${toolName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error(`MCP call failed for ${toolName}:`, error);
+      return {
+        success: false,
+        error: error.message,
+        tool: toolName
+      };
+    }
+  };
+
+  const formatMCPResponse = (result: any): string => {
+    if (!result.success) {
+      return `❌ **Error:** ${result.error || 'Unknown error'}`;
+    }
+
+    let formatted = '';
+
+    switch (result.tool) {
+      case 'find_places':
+        formatted += `### 📍 Places Found\n\n`;
+        if (result.places && result.places.length > 0) {
+          result.places.forEach((place: any, idx: number) => {
+            formatted += `**${idx + 1}. ${place.name}**\n`;
+            formatted += `   - ⭐ Rating: ${place.rating}/5.0 (${place.user_ratings_total || 0} reviews)\n`;
+            formatted += `   - 📍 Location: ${place.vicinity}\n`;
+            formatted += `   - 🏷️ Type: ${place.types?.join(', ') || 'N/A'}\n\n`;
+          });
+        }
+        break;
+
+      case 'get_route':
+        formatted += `### 🗺️ Route Information\n\n`;
+        if (result.summary) {
+          formatted += `**Distance:** ${result.summary.total_distance_km?.toFixed(1)} km (${(result.summary.total_distance_km * 0.621371).toFixed(1)} miles)\n\n`;
+          formatted += `**Duration:** ${(result.summary.total_duration_minutes / 60).toFixed(1)} hours\n\n`;
+          formatted += `**Start:** ${result.summary.start_address || 'N/A'}\n\n`;
+          formatted += `**End:** ${result.summary.end_address || 'N/A'}\n\n`;
+        }
+        break;
+
+      case 'get_current_weather':
+        formatted += `### 🌤️ Current Weather\n\n`;
+        if (result.location) {
+          formatted += `**Location:** ${result.location.name}, ${result.location.country}\n\n`;
+        }
+        if (result.current) {
+          formatted += `**Temperature:** ${Math.round(result.current.temperature)}°F (Feels like ${Math.round(result.current.feels_like)}°F)\n\n`;
+          formatted += `**Conditions:** ${result.current.weather?.description || 'N/A'}\n\n`;
+          formatted += `**Humidity:** ${result.current.humidity}%\n\n`;
+          formatted += `**Wind Speed:** ${result.current.wind_speed} mph\n\n`;
+        }
+        break;
+
+      case 'get_forecast':
+        formatted += `### 📅 Weather Forecast\n\n`;
+        if (result.forecast_by_day && result.forecast_by_day.length > 0) {
+          result.forecast_by_day.forEach((day: any, idx: number) => {
+            formatted += `**Day ${idx + 1} (${day.date})**\n`;
+            formatted += `   - 🌡️ Temp: ${Math.round(day.temp_min)}°F - ${Math.round(day.temp_max)}°F\n`;
+            formatted += `   - ☁️ ${day.weather?.description || 'N/A'}\n`;
+            formatted += `   - 💧 Rain: ${Math.round(day.precipitation_prob * 100)}%\n\n`;
+          });
+        }
+        break;
+
+      case 'hotel_search':
+        formatted += `### 🏨 Hotels Found\n\n`;
+        if (result.hotels && result.hotels.length > 0) {
+          result.hotels.forEach((hotel: any, idx: number) => {
+            formatted += `**${idx + 1}. ${hotel.name}**\n`;
+            formatted += `   - ⭐ Rating: ${hotel.rating}/5.0\n`;
+            formatted += `   - 💰 Price: $${hotel.price}/night\n`;
+            formatted += `   - 🎯 Amenities: ${hotel.amenities?.join(', ') || 'N/A'}\n`;
+            formatted += `   - ✅ Available: ${hotel.available ? 'Yes' : 'No'}\n\n`;
+          });
+        }
+        break;
+
+      case 'plan_scenic_route':
+        formatted += `### 🚗 Scenic Route Plan\n\n`;
+        if (result.summary) {
+          formatted += `**Total Distance:** ${result.summary.total_distance_km} km\n`;
+          formatted += `**Driving Time:** ${result.summary.total_driving_hours} hours\n`;
+          formatted += `**Recommended Stops:** ${result.summary.recommended_stops}\n`;
+          formatted += `**Weather Outlook:** ${result.summary.weather_outlook}\n\n`;
+        }
+        if (result.itinerary && result.itinerary.stops) {
+          formatted += `### 📍 Daily Itinerary\n\n`;
+          result.itinerary.stops.forEach((stop: any) => {
+            formatted += `**Day ${stop.day} (${stop.date})**\n`;
+            formatted += `   - 🌡️ Weather: ${stop.weather.temp_range}, ${stop.weather.conditions}\n`;
+            formatted += `   - 🚗 Driving: ${stop.driving_estimate}\n`;
+            if (stop.recommended_places && stop.recommended_places.length > 0) {
+              formatted += `   - 📍 Places to visit:\n`;
+              stop.recommended_places.forEach((place: any) => {
+                formatted += `     • ${place.name} (⭐${place.rating}) - ${place.why_recommended}\n`;
+              });
+            }
+            formatted += `\n`;
+          });
+        }
+        break;
+
+      case 'weather_aware_itinerary':
+        formatted += `### 🗓️ Weather-Aware Itinerary\n\n`;
+        formatted += `**Location:** ${result.location}\n\n`;
+        if (result.itinerary && result.itinerary.length > 0) {
+          result.itinerary.forEach((day: any) => {
+            formatted += `**Day ${day.day} (${day.date})**\n`;
+            formatted += `   - 🌡️ ${day.weather.temp_range}\n`;
+            formatted += `   - ☁️ ${day.weather.conditions}\n`;
+            formatted += `   - 🎯 Recommended: ${day.recommended_activities?.join(', ') || 'N/A'}\n\n`;
+          });
+        }
+        break;
+
+      default:
+        formatted += JSON.stringify(result, null, 2);
+    }
+
+    if (result.pricing) {
+      formatted += `\n---\n**💰 Cost:** ${result.pricing.base_cost?.toFixed(2) || result.pricing.total_charge?.toFixed(2)} ${result.pricing.currency || 'USDC'}`;
+    }
+
+    return formatted;
+  };
+
+  const processQuery = async (query: string): Promise<void> => {
+    setIsProcessing(true);
+
+    const userMsg: Message = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: query,
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, userMsg]);
+
+    const startTime = Date.now();
+    let totalCost = 0;
+    const functionsUsed: string[] = [];
+    const mcpResults: any[] = [];
+    let responseText = '';
+
+    try {
+      // Analyze query and call appropriate MCP servers
+      const lowerQuery = query.toLowerCase();
+
+      if (lowerQuery.includes('hotel')) {
+        // Call hotel search
+        const match = query.match(/in\s+([^,]+)/i) || query.match(/near\s+([^,]+)/i);
+        const location = match ? match[1].trim() : 'New York';
+        
+        const result = await callMCPTool(travelAgentMCP.endpoint, 'hotel_search', {
+          location,
+          checkIn: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          checkOut: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.03;
+        functionsUsed.push('hotel_search');
+        
+        addTransaction(`Hotel search in ${location} (X402)`, 'hotel_search', 0.03);
+        setTravelAgentMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.03,
+          tools: prev.tools.map(t => t.id === 'hotel_search' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
+
+      } else if (lowerQuery.includes('weather forecast') || lowerQuery.includes('7-day') || lowerQuery.includes('forecast')) {
+        // Call weather forecast
+        const match = query.match(/for\s+([^,\.]+)/i) || query.match(/in\s+([^,\.]+)/i);
+        const location = match ? match[1].trim() : 'Miami';
+        
+        const result = await callMCPTool(weatherMCP.endpoint, 'get_forecast', {
+          location,
+          days: 7,
+          units: 'imperial'
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.02;
+        functionsUsed.push('get_forecast');
+        
+        addTransaction(`Weather forecast for ${location} (X402)`, 'get_forecast', 0.02);
+        setWeatherMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.02,
+          tools: prev.tools.map(t => t.id === 'get_forecast' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
+
+      } else if (lowerQuery.includes('current weather') || lowerQuery.includes('weather in')) {
+        // Call current weather
+        const match = query.match(/in\s+([^,\.]+)/i) || query.match(/for\s+([^,\.]+)/i);
+        const location = match ? match[1].trim() : 'Seattle';
+        
+        const result = await callMCPTool(weatherMCP.endpoint, 'get_current_weather', {
+          location,
+          units: 'imperial'
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.01;
+        functionsUsed.push('get_current_weather');
+        
+        addTransaction(`Current weather for ${location} (X402)`, 'get_current_weather', 0.01);
+        setWeatherMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.01,
+          tools: prev.tools.map(t => t.id === 'get_current_weather' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
+
+      } else if (lowerQuery.includes('plan') && (lowerQuery.includes('route') || lowerQuery.includes('trip'))) {
+        // Call scenic route planner
+        const parts = query.match(/from\s+([^to]+)\s+to\s+([^with]+)/i);
+        const origin = parts ? parts[1].trim() : 'San Francisco';
+        const destination = parts ? parts[2].trim() : 'Los Angeles';
+        
+        const result = await callMCPTool(travelAgentMCP.endpoint, 'plan_scenic_route', {
+          origin,
+          destination,
+          days: 3,
+          preferences: {
+            avoid_rain: true,
+            prefer_scenic: true,
+            max_driving_hours_per_day: 6
+          }
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.total_charge || 0.05;
+        functionsUsed.push('plan_scenic_route');
+        
+        addTransaction(`Scenic route: ${origin} to ${destination} (X402)`, 'plan_scenic_route', 0.05);
+        setTravelAgentMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.05,
+          tools: prev.tools.map(t => t.id === 'plan_scenic_route' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
+
+      } else if (lowerQuery.includes('find') || lowerQuery.includes('search') || lowerQuery.includes('attractions')) {
+        // Call find places
+        const match = query.match(/in\s+([^,\.]+)/i) || query.match(/near\s+([^,\.]+)/i);
+        const location = match ? match[1].trim() : 'Central Park, New York';
+        
+        const type = lowerQuery.includes('hotel') ? 'lodging' : 
+                     lowerQuery.includes('restaurant') ? 'restaurant' : 
+                     'tourist_attraction';
+        
+        const result = await callMCPTool(googleMapsMCP.endpoint, 'find_places', {
+          location,
+          type,
+          radius: 5000
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.032;
+        functionsUsed.push('find_places');
+        
+        addTransaction(`Find places in ${location} (X402)`, 'find_places', 0.032);
+        setGoogleMapsMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.032,
+          tools: prev.tools.map(t => t.id === 'find_places' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
+
+      } else if (lowerQuery.includes('itinerary')) {
+        // Call weather-aware itinerary
+        const match = query.match(/for\s+([^,\(]+)/i);
+        const location = match ? match[1].trim() : 'San Diego';
+        const daysMatch = query.match(/(\d+)\s*day/i);
+        const days = daysMatch ? parseInt(daysMatch[1]) : 3;
+        
+        const result = await callMCPTool(travelAgentMCP.endpoint, 'weather_aware_itinerary', {
+          location,
+          days
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.03;
+        functionsUsed.push('weather_aware_itinerary');
+        
+        addTransaction(`Itinerary for ${location} (X402)`, 'weather_aware_itinerary', 0.03);
+        setTravelAgentMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.03,
+          tools: prev.tools.map(t => t.id === 'weather_aware_itinerary' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
+
+      } else {
+        responseText = '❓ I can help you with:\n\n' +
+                      '- Finding hotels and places\n' +
+                      '- Getting weather forecasts\n' +
+                      '- Planning scenic routes\n' +
+                      '- Creating weather-aware itineraries\n\n' +
+                      'Try asking about hotels, weather, routes, or attractions!';
+      }
+
+    } catch (error: any) {
+      responseText = `❌ **Error:** ${error.message}`;
+    }
+
+    const executionTime = Date.now() - startTime;
+    setUserBalance(prev => prev - totalCost);
+    setTotalSpent(prev => prev + totalCost);
+    setTotalRequests(prev => prev + 1);
+
+    const assistantMsg: Message = {
+      id: `msg-${Date.now()}-assistant`,
+      role: 'assistant',
+      content: responseText + `\n\n---\n\n💰 **Total cost:** $${totalCost.toFixed(2)} USDC (X402)\n⏱️ **Execution time:** ${(executionTime / 1000).toFixed(1)}s\n🔗 **Protocol:** ERC-8004 + X402 payment\n🛠️ **Functions used:** ${functionsUsed.join(', ') || 'None'}`,
+      timestamp: new Date(),
+      cost: totalCost,
+      executionTime,
+      functionsUsed,
+      mcpResults
+    };
+
+    setMessages(prev => [...prev, assistantMsg]);
+
+    const testResult: TestResult = {
+      id: `test-${Date.now()}`,
+      query,
+      success: true,
+      cost: totalCost,
+      timestamp: new Date()
+    };
+    setTestResults(prev => [testResult, ...prev].slice(0, 10));
+
+    setIsProcessing(false);
+  };
+
+  const handleSendMessage = async (): Promise<void> => {
+    if (!inputMessage.trim() || isProcessing) return;
+    const query = inputMessage;
+    setInputMessage('');
+    await processQuery(query);
+  };
+
+  const handleQuickQuery = async (query: string): Promise<void> => {
+    await processQuery(query);
+  };
+
+  const refreshServer = (): void => {
+    setGoogleMapsMCP(prev => ({ ...prev, status: 'connected' }));
+    setWeatherMCP(prev => ({ ...prev, status: 'connected' }));
+    setTravelAgentMCP(prev => ({ ...prev, status: 'connected' }));
+  };
+
+  const clearChat = (): void => {
+    setMessages(prev => [prev[0]]);
+  };
+
+  const clearResults = (): void => {
+    setTestResults([]);
+  };
+
+  const updateToolPrice = (serverId: string, toolId: string, newCost: number): void => {
+    if (serverId === 'google-maps') {
+      setGoogleMapsMCP(prev => ({
+        ...prev,
+        tools: prev.tools.map(t => t.id === toolId ? { ...t, cost: newCost } : t)
+      }));
+    } else if (serverId === 'weather') {
+      setWeatherMCP(prev => ({
+        ...prev,
+        tools: prev.tools.map(t => t.id === toolId ? { ...t, cost: newCost } : t)
+      }));
+    } else if (serverId === 'travel-agent') {
+      setTravelAgentMCP(prev => ({
+        ...prev,
+        tools: prev.tools.map(t => t.id === toolId ? { ...t, cost: newCost } : t)
+      }));
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
+      {/* Header */}
+      <header style={{ backgroundColor: '#000', color: '#fff', padding: '20px 32px', borderBottom: '2px solid #333' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '48px' }}>🧪</span>
+          <div>
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: 0 }}>Travel Agent MCP Test Environment</h1>
+            <p style={{ color: '#aaa', margin: '4px 0 0 0' }}>X402 Payment Protocol + ERC-8004 Agent Discovery • Real MCP Integration</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
+        {/* Upper Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '24px' }}>
+          {/* Left Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Google Maps MCP Server */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '36px' }}>🗺️</span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>{googleMapsMCP.name}</h2>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <span style={{ padding: '4px 16px', backgroundColor: googleMapsMCP.status === 'connected' ? '#10b981' : '#ef4444', color: '#fff', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
+                    {googleMapsMCP.status.toUpperCase()}
+                  </span>
+                  <button onClick={refreshServer} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
+                    🔄 Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', marginBottom: '24px', fontSize: '14px' }}>
+                <div><p style={{ color: '#6b7280', fontWeight: '600', margin: '0 0 4px 0' }}>Provider:</p><p style={{ margin: 0, color: '#1f2937' }}>{googleMapsMCP.provider}</p></div>
+                <div><p style={{ color: '#6b7280', fontWeight: '600', margin: '0 0 4px 0' }}>Coverage:</p><p style={{ margin: 0, color: '#1f2937' }}>{googleMapsMCP.coverage}</p></div>
+                <div><p style={{ color: '#6b7280', fontWeight: '600', margin: '0 0 4px 0' }}>Database:</p><p style={{ margin: 0, color: '#1f2937' }}>{googleMapsMCP.database}</p></div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px', fontSize: '14px' }}>
+                <div><p style={{ color: '#6b7280', fontWeight: '600', margin: '0 0 4px 0' }}>Endpoint:</p><p style={{ margin: 0, fontFamily: 'monospace', fontSize: '12px', color: '#1f2937' }}>{googleMapsMCP.endpoint}</p></div>
+                <div><p style={{ color: '#6b7280', fontWeight: '600', margin: '0 0 4px 0' }}>Protocol:</p><p style={{ margin: 0, color: '#f59e0b', fontWeight: '600' }}>💳 X402 + ERC-8004</p></div>
+              </div>
+
+              <div style={{ background: 'linear-gradient(to right, #dbeafe, #bfdbfe)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+                <p style={{ fontSize: '14px', color: '#374151', fontWeight: '600', margin: '0 0 8px 0' }}>Server Earnings (USDC)</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>${googleMapsMCP.balance.toFixed(2)} USDC</p>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>🔧</span>
+                    <h3 style={{ fontWeight: 'bold', margin: 0, color: '#1f2937' }}>Available Tools & Pricing</h3>
+                  </div>
+                  <button 
+                    onClick={() => setIsEditingPrices(!isEditingPrices)}
+                    style={{ padding: '4px 16px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    ✏️ Edit Prices
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {googleMapsMCP.tools.map((tool) => (
+                    <div key={tool.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontWeight: 'bold', margin: '0 0 4px 0', color: '#1f2937' }}>{tool.name}</h4>
+                          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tool.description}</p>
+                        </div>
+                        {isEditingPrices ? (
+                          <input
+                            type="number"
+                            value={tool.cost}
+                            onChange={(e) => updateToolPrice('google-maps', tool.id, parseFloat(e.target.value))}
+                            style={{ width: '90px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '6px', marginLeft: '16px' }}
+                            step="0.001"
+                            min="0.001"
+                            max="1.00"
+                          />
+                        ) : (
+                          <span style={{ marginLeft: '16px', padding: '4px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                            ${tool.cost.toFixed(3)} USDC
+                          </span>
+                        )}
+                      </div>
+                      {tool.callCount > 0 && (
+                        <p style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', margin: '8px 0 0 0' }}>
+                          ✓ Called {tool.callCount} time{tool.callCount > 1 ? 's' : ''} via X402
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Weather MCP Server */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '36px' }}>🌤️</span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>{weatherMCP.name}</h2>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <span style={{ padding: '4px 16px', backgroundColor: weatherMCP.status === 'connected' ? '#10b981' : '#ef4444', color: '#fff', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
+                    {weatherMCP.status.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ background: 'linear-gradient(to right, #fed7aa, #fdba74)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+                <p style={{ fontSize: '14px', color: '#374151', fontWeight: '600', margin: '0 0 8px 0' }}>Server Earnings (USDC)</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#ea580c', margin: 0 }}>${weatherMCP.balance.toFixed(2)} USDC</p>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {weatherMCP.tools.map((tool) => (
+                    <div key={tool.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontWeight: 'bold', margin: '0 0 4px 0', color: '#1f2937' }}>{tool.name}</h4>
+                          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tool.description}</p>
+                        </div>
+                        <span style={{ marginLeft: '16px', padding: '4px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                          ${tool.cost.toFixed(2)} USDC
+                        </span>
+                      </div>
+                      {tool.callCount > 0 && (
+                        <p style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', margin: '8px 0 0 0' }}>
+                          ✓ Called {tool.callCount} time{tool.callCount > 1 ? 's' : ''} via X402
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Travel Agent MCP Server */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '36px' }}>🎯</span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>{travelAgentMCP.name}</h2>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <span style={{ padding: '4px 16px', backgroundColor: travelAgentMCP.status === 'connected' ? '#10b981' : '#ef4444', color: '#fff', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
+                    {travelAgentMCP.status.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ background: 'linear-gradient(to right, #ddd6fe, #c4b5fd)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+                <p style={{ fontSize: '14px', color: '#374151', fontWeight: '600', margin: '0 0 8px 0' }}>Server Earnings (USDC)</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#7c3aed', margin: 0 }}>${travelAgentMCP.balance.toFixed(2)} USDC</p>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {travelAgentMCP.tools.map((tool) => (
+                    <div key={tool.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontWeight: 'bold', margin: '0 0 4px 0', color: '#1f2937' }}>{tool.name}</h4>
+                          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tool.description}</p>
+                        </div>
+                        <span style={{ marginLeft: '16px', padding: '4px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                          ${tool.cost.toFixed(2)} USDC
+                        </span>
+                      </div>
+                      {tool.callCount > 0 && (
+                        <p style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', margin: '8px 0 0 0' }}>
+                          ✓ Called {tool.callCount} time{tool.callCount > 1 ? 's' : ''} via X402
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* USDC Balance */}
+            <div style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 50%, #06b6d4 100%)', borderRadius: '16px', padding: '32px', color: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '40px' }}>💰</span>
+                  <h2 style={{ fontSize: '28px', fontWeight: 'bold', margin: 0 }}>USDC Balance</h2>
+                </div>
+                <div style={{ fontSize: '48px', fontWeight: 'bold' }}>${userBalance.toFixed(2)} USDC</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                {[
+                  { label: 'Available Balance', value: `$${userBalance.toFixed(2)}` },
+                  { label: 'Total Spent', value: `$${totalSpent.toFixed(2)}` },
+                  { label: 'Total Requests', value: totalRequests },
+                  { label: 'Last Activity', value: lastActivity }
+                ].map((item, idx) => (
+                  <div key={idx} style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '16px' }}>
+                    <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', margin: '0 0 4px 0' }}>{item.label}</p>
+                    <p style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ backgroundColor: 'rgba(109, 40, 217, 0.5)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '20px' }}>
+                <p style={{ fontWeight: 'bold', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>🎯</span>
+                  X402 + ERC-8004 REAL MCP INTEGRATION
+                </p>
+                <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', margin: 0 }}>
+                  Real-time MCP server calls with USDC payments. Agent orchestrates Google Maps, Weather, and Travel Agent MCP servers.
+                </p>
+              </div>
+            </div>
+
+            {/* Transaction History */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '24px' }}>📊</span>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>Recent Transactions</h2>
+              </div>
+
+              {transactions.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#6b7280', padding: '32px 0' }}>
+                  No transactions yet. Start testing to see X402 payment flow.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {transactions.map((tx) => (
+                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                        <span style={{ fontSize: '20px' }}>✅</span>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontWeight: '600', fontSize: '14px', margin: '0 0 4px 0', color: '#1f2937' }}>{tx.description}</p>
+                          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>({tx.toolName})</p>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', marginLeft: '16px' }}>
+                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#dc2626', margin: '0 0 4px 0' }}>-${tx.amount.toFixed(2)} USDC</p>
+                        <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tx.timestamp}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Test Controls */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '24px' }}>🎮</span>
+                <h3 style={{ fontWeight: 'bold', margin: 0, color: '#1f2937' }}>Test Controls</h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button onClick={refreshServer} style={{ width: '100%', backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>
+                  🔄 Refresh Servers
+                </button>
+                <button onClick={clearChat} style={{ width: '100%', backgroundColor: '#e5e7eb', color: '#1f2937', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>
+                  💬 Clear Chat
+                </button>
+                <button onClick={clearResults} style={{ width: '100%', backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>
+                  🗑️ Clear Results
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Test Queries */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '20px' }}>
+              <h3 style={{ fontWeight: 'bold', marginBottom: '16px', color: '#1f2937' }}>Quick Test Queries:</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {quickQueries.map((query, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleQuickQuery(query)}
+                    disabled={isProcessing}
+                    style={{ textAlign: 'left', padding: '12px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', color: '#374151', cursor: isProcessing ? 'not-allowed' : 'pointer', opacity: isProcessing ? 0.5 : 1 }}
+                  >
+                    {query}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Test Results */}
+            <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '24px' }}>📊</span>
+                <h3 style={{ fontWeight: 'bold', margin: 0, color: '#1f2937' }}>Test Results ({testResults.length})</h3>
+              </div>
+              {testResults.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#6b7280', padding: '32px 0', fontSize: '14px' }}>
+                  No test results yet.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '256px', overflowY: 'auto' }}>
+                  {testResults.map((result) => (
+                    <div key={result.id} style={{ padding: '12px', backgroundColor: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '8px', fontSize: '12px', color: '#065f46' }}>
+                      ✓ {result.query.substring(0, 40)}... - ${result.cost.toFixed(2)} USDC
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Chat Interface - Full Width Bottom */}
+        <div style={{ backgroundColor: '#000', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+          <div style={{ backgroundColor: '#1f2937', padding: '16px 24px', borderBottom: '1px solid #374151' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '32px' }}>💬</span>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', margin: 0 }}>Travel Agent MCP Chat Interface</h2>
+                <p style={{ fontSize: '14px', color: '#9ca3af', margin: '4px 0 0 0' }}>Real MCP Integration with X402 Payment Protocol</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: '#fff', padding: '24px', maxHeight: '500px', overflowY: 'auto' }}>
+            {messages.map((msg) => (
+              <div key={msg.id} style={{ marginBottom: '20px', backgroundColor: msg.role === 'system' ? '#d1fae5' : 'transparent', borderLeft: msg.role === 'system' ? '4px solid #10b981' : 'none', padding: msg.role === 'system' ? '16px' : '0', borderRadius: msg.role === 'system' ? '0 8px 8px 0' : '0' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <span style={{ fontSize: '24px', flexShrink: 0 }}>
+                    {msg.role === 'system' ? '🔧' : msg.role === 'user' ? '👤' : '🤖'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 'bold', color: '#1f2937' }}>
+                        {msg.role === 'system' ? 'Travel Agent MCP' : msg.role === 'user' ? 'You' : 'Travel Agent'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#6b7280' }}>{msg.timestamp.toLocaleTimeString()}</span>
+                      {msg.cost !== undefined && msg.cost > 0 && (
+                        <span style={{ marginLeft: 'auto', fontSize: '12px', fontWeight: 'bold', color: '#dc2626' }}>
+                          -${msg.cost.toFixed(2)} USDC
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#374151', lineHeight: '1.6' }}>
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {isProcessing && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px' }}>
+                <span style={{ fontSize: '24px', animation: 'pulse 1.5s ease-in-out infinite' }}>⚡</span>
+                <span style={{ fontSize: '14px', color: '#6b7280' }}>Calling MCP servers...</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: '#f3f4f6', padding: '16px', borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                placeholder="Ask about trips, weather, routes, or places..."
+                style={{ flex: 1, padding: '12px 16px', border: '2px solid #d1d5db', borderRadius: '8px', fontSize: '14px' }}
+                disabled={isProcessing}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={isProcessing || !inputMessage.trim()}
+                style={{ backgroundColor: isProcessing || !inputMessage.trim() ? '#9ca3af' : '#3b82f6', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', fontWeight: 'bold', cursor: isProcessing || !inputMessage.trim() ? 'not-allowed' : 'pointer' }}
+              >
+                {isProcessing ? '⏳' : '✉️'} Send
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,547 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+
+interface Tool {
+  id: string;
+  name: string;
+  description: string;
+  baseCost: string;
+}
+
+interface MCPServer {
+  id: string;
+  name: string;
+  endpoint: string;
+  tools: Tool[];
+}
+
+interface Agent {
+  id: string;
+  onChainId: number;
+  name: string;
+  walletAddress: string;
+  mcpServers: MCPServer[];
+}
+
+interface ExecutionStep {
+  id: number;
+  title: string;
+  status: 'pending' | 'processing' | 'completed';
+  message: string;
+  progress: number;
+  data?: any;
+}
+
+interface PricingData {
+  baseCost: string;
+  margin: string;
+  total: string;
+}
+
+// Helper to make wallet addresses look real but readable
+const shortenAddress = (addr: string) => {
+  if (!addr || addr.length < 10) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+};
+
+export default function DemoPage() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [steps, setSteps] = useState<ExecutionStep[]>([]);
+  const [totalCost, setTotalCost] = useState<PricingData | null>(null);
+  const [executionTime, setExecutionTime] = useState(0);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userBalance, setUserBalance] = useState(1000);
+  const [agentBalance, setAgentBalance] = useState(0);
+  const [escrowBalance, setEscrowBalance] = useState(0);
+  const [showBalanceFlow, setShowBalanceFlow] = useState(false);
+  const [discoveryStep, setDiscoveryStep] = useState(0);
+
+  const agentDescriptions = [
+    { emoji: '🧳', specialty: 'Trip Planning & Itineraries', rating: 4.8, executions: 1247, color: 'from-blue-400 to-blue-600', ringColor: 'ring-blue-300' },
+    { emoji: '🌤️', specialty: 'Weather & Route Optimization', rating: 4.9, executions: 892, color: 'from-orange-400 to-orange-600', ringColor: 'ring-orange-300' },
+    { emoji: '🗺️', specialty: 'Local Guides & Recommendations', rating: 4.7, executions: 2103, color: 'from-purple-400 to-purple-600', ringColor: 'ring-purple-300' }
+  ];
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/marketplace/agents')
+      .then(res => res.json())
+      .then(data => {
+        setAgents(data.agents || []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    let interval: number | null = null;
+    if (isExecuting) {
+      interval = window.setInterval(() => {
+        setExecutionTime(prev => prev + 0.1);
+      }, 100);
+    }
+    return () => {
+      if (interval !== null) window.clearInterval(interval);
+    };
+  }, [isExecuting]);
+
+  const handleAgentSelect = async (agent: Agent) => {
+    setSelectedAgent(agent);
+    setSelectedTool(null);
+    setDiscoveryStep(0);
+
+    // Simulated ERC-8004 discovery steps
+    setDiscoveryStep(1);
+    await new Promise(r => setTimeout(r, 600));
+    setDiscoveryStep(2);
+    await new Promise(r => setTimeout(r, 600));
+    setDiscoveryStep(3);
+  };
+
+  const startDemo = async () => {
+    if (!selectedAgent || !selectedTool) {
+      alert('Please select an agent and a tool first');
+      return;
+    }
+
+    setIsExecuting(true);
+    setShowSuccess(false);
+    setShowBalanceFlow(false);
+    setExecutionTime(0);
+    setUserBalance(1000);
+    setAgentBalance(0);
+    setEscrowBalance(0);
+
+    setSteps([
+      { id: 1, title: '🔍 ERC-8004: Agent Discovery', status: 'processing', message: 'Querying blockchain registry...', progress: 20 },
+    ]);
+
+    await new Promise(r => setTimeout(r, 1200));
+
+    setSteps([
+      { id: 1, title: '🔍 ERC-8004: Agent Discovery', status: 'completed', message: `Found: ${selectedAgent.name}`, progress: 100 },
+      { id: 2, title: '📡 X402: Request Execution', status: 'processing', message: 'Creating execution request...', progress: 30 },
+    ]);
+
+    await new Promise(r => setTimeout(r, 1200));
+
+    try {
+      const execRes = await fetch('http://localhost:3001/api/marketplace/executions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolId: selectedTool.id,
+          input: { origin: 'San Francisco', destination: 'Los Angeles' }
+        })
+      });
+
+      const execData = await execRes.json();
+      setTotalCost(execData.pricing);
+      const amount = parseFloat(execData.pricing.total);
+
+      setSteps(prev => [
+        ...prev.slice(0, 1),
+        { id: 2, title: '📡 X402: Request Execution', status: 'completed', message: 'Execution created on X402 gateway', progress: 100 },
+        { id: 3, title: '💳 X402: Payment Required (402)', status: 'completed', message: `Payment requested: ${amount.toFixed(2)} USDC`, progress: 100, data: execData.pricing },
+        { id: 4, title: '🔐 USDC Authorization', status: 'processing', message: 'Approving transfer into escrow...', progress: 40 }
+      ]);
+
+      await new Promise(r => setTimeout(r, 1500));
+
+      setShowBalanceFlow(true);
+      setUserBalance(prev => prev - amount);
+      setEscrowBalance(amount);
+
+      await fetch(`http://localhost:3001/api/marketplace/executions/${execData.executionId}/authorize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: '0x742d35Cc6634C0532925a3b844Bc9e759f0bEb1' })
+      });
+
+      setSteps(prev => [
+        ...prev.slice(0, 3),
+        { id: 4, title: '🔐 USDC Authorization', status: 'completed', message: `${amount.toFixed(2)} USDC locked in escrow`, progress: 100 },
+        { id: 5, title: '⚡ MCP Tool Execution', status: 'processing', message: `Agent calls MCP tool: ${selectedTool.name}`, progress: 60 }
+      ]);
+
+      await new Promise(r => setTimeout(r, 1800));
+
+      await fetch(`http://localhost:3001/api/marketplace/executions/${execData.executionId}/execute`, {
+        method: 'POST'
+      });
+
+      setSteps(prev => [
+        ...prev.slice(0, 4),
+        { id: 5, title: '⚡ MCP Tool Execution', status: 'completed', message: 'Tool finished successfully', progress: 100 },
+        { id: 6, title: '💰 Payment Settlement', status: 'processing', message: 'Releasing funds from escrow to agent...', progress: 80 }
+      ]);
+
+      await new Promise(r => setTimeout(r, 1200));
+
+      setEscrowBalance(0);
+      setAgentBalance(amount);
+
+      setSteps(prev => [
+        ...prev.slice(0, 5),
+        { id: 6, title: '💰 Payment Settlement', status: 'completed', message: `${amount.toFixed(2)} USDC sent to agent wallet`, progress: 100 }
+      ]);
+
+      setShowSuccess(true);
+    } catch (error) {
+      console.error(error);
+      alert('Error: ' + (error instanceof Error ? error.message : 'Unknown'));
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-8xl animate-spin mb-4">⚡</div>
+          <p className="text-2xl text-gray-800 font-bold">Loading Agents...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-10 px-4 flex justify-center">
+      <div className="w-full max-w-6xl mx-auto">
+        {/* TRUE CENTERED HEADER */}
+        <header className="flex flex-col items-center text-center mb-10">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-5xl animate-bounce">🚀</span>
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold">
+              <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                TravelWise AI Agent Marketplace
+              </span>
+            </h1>
+          </div>
+          <p className="text-lg sm:text-xl md:text-2xl text-gray-800 font-semibold">
+            Antigravity · ERC‑8004 · X402 · MCP Integration
+          </p>
+
+          {/* User wallet directly under subtitle */}
+          <div className="mt-4">
+            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-2xl px-6 py-3 shadow-lg">
+              <span className="text-white text-xl">💼</span>
+              <span className="text-white font-semibold text-sm sm:text-base">
+                Your Wallet: <span className="font-mono">{shortenAddress('0x742d35Cc6634C0532925a3b844Bc9e759f0bEb1')}</span>
+              </span>
+              <span className={`text-2xl sm:text-3xl font-bold text-white ${showBalanceFlow ? 'animate-pulse' : ''}`}>
+                {userBalance.toFixed(2)} USDC
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* STEP 1: AGENTS - with real spacing */}
+        <section className="mb-10">
+          <div className="text-center mb-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center justify-center gap-2">
+              <span className="text-3xl">📋</span>
+              Step 1: Select Agent
+            </h2>
+            <p className="text-gray-700 mt-1 text-sm sm:text-base">
+              Choose an AI agent from the on‑chain registry
+            </p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-6 sm:gap-8">
+            {agents.map((agent, idx) => (
+              <button
+                key={agent.id}
+                onClick={() => handleAgentSelect(agent)}
+                className={`group w-full max-w-xs sm:w-64 text-left rounded-2xl p-5 transition-all duration-300 ${
+                  selectedAgent?.id === agent.id
+                    ? `bg-gradient-to-br ${agentDescriptions[idx].color} shadow-2xl scale-105 ring-4 ${agentDescriptions[idx].ringColor}`
+                    : 'bg-white border border-gray-300 hover:border-gray-400 hover:shadow-lg hover:scale-105'
+                }`}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className={`text-5xl mb-3 ${selectedAgent?.id === agent.id ? 'animate-bounce' : 'group-hover:scale-110 transition-transform'}`}>
+                    {agentDescriptions[idx].emoji}
+                  </div>
+                  <h3 className={`text-lg sm:text-xl font-bold mb-1 ${selectedAgent?.id === agent.id ? 'text-white' : 'text-gray-900'}`}>
+                    {agent.name}
+                  </h3>
+                  {selectedAgent?.id === agent.id && (
+                    <span className="text-3xl mb-1 text-white animate-pulse">✓</span>
+                  )}
+                  <p className={`text-xs sm:text-sm mb-2 ${selectedAgent?.id === agent.id ? 'text-white/90' : 'text-gray-700'}`}>
+                    {agentDescriptions[idx].specialty}
+                  </p>
+
+                  <div className="flex items-center justify-center gap-3 text-xs mb-2">
+                    <span className={`${selectedAgent?.id === agent.id ? 'text-white' : 'text-gray-700'}`}>
+                      ⭐ {agentDescriptions[idx].rating}
+                    </span>
+                    <span className={`${selectedAgent?.id === agent.id ? 'text-white' : 'text-gray-700'}`}>
+                      ✅ {agentDescriptions[idx].executions} runs
+                    </span>
+                  </div>
+
+                  {/* Agent wallet near card */}
+                  <p className={`text-[11px] font-mono ${selectedAgent?.id === agent.id ? 'text-white/80' : 'text-gray-500'}`}>
+                    {shortenAddress(agent.walletAddress)}
+                  </p>
+                  <p className={`text-[11px] mt-1 ${selectedAgent?.id === agent.id ? 'text-white/80' : 'text-gray-600'}`}>
+                    Chain #{agent.onChainId} · {agent.mcpServers?.[0]?.tools?.length || 0} tools
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* ERC‑8004 DISCOVERY VISUAL */}
+        {selectedAgent && (
+          <section className="mb-10">
+            <div className="max-w-3xl mx-auto bg-gradient-to-r from-indigo-50 to-purple-50 rounded-3xl p-6 border border-indigo-200 shadow">
+              <h3 className="text-center text-xl font-bold text-gray-900 mb-4 flex items-center justify-center gap-2">
+                <span className="text-2xl">🔍</span>
+                ERC‑8004 Agent Discovery Process
+              </h3>
+              <div className="grid grid-cols-3 gap-3 text-center text-xs sm:text-sm">
+                <div className={`p-3 rounded-xl ${discoveryStep >= 1 ? 'bg-green-500 text-white' : 'bg-white text-gray-400'}`}>
+                  <div className="text-lg mb-1">{discoveryStep >= 1 ? '✓' : '1'}</div>
+                  <p className="font-semibold">Query Registry</p>
+                  <p>Blockchain lookup</p>
+                </div>
+                <div className={`p-3 rounded-xl ${discoveryStep >= 2 ? 'bg-green-500 text-white' : 'bg-white text-gray-400'}`}>
+                  <div className="text-lg mb-1">{discoveryStep >= 2 ? '✓' : '2'}</div>
+                  <p className="font-semibold">Verify Agent</p>
+                  <p>Check credentials</p>
+                </div>
+                <div className={`p-3 rounded-xl ${discoveryStep >= 3 ? 'bg-green-500 text-white' : 'bg-white text-gray-400'}`}>
+                  <div className="text-lg mb-1">{discoveryStep >= 3 ? '✓' : '3'}</div>
+                  <p className="font-semibold">Load Tools</p>
+                  <p>Fetch MCP endpoints</p>
+                </div>
+              </div>
+
+              {discoveryStep >= 3 && (
+                <div className="mt-4 p-3 bg-white rounded-xl border border-indigo-200 text-xs sm:text-sm">
+                  <div className="flex flex-col sm:flex-row justify-between gap-2">
+                    <div>
+                      <p className="text-gray-500">Agent Wallet</p>
+                      <p className="font-mono text-gray-900">{shortenAddress(selectedAgent.walletAddress)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-gray-500">MCP Server</p>
+                      <p className="text-blue-600 font-semibold truncate max-w-xs">
+                        {selectedAgent.mcpServers?.[0]?.endpoint}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* STEP 2: TOOLS */}
+        {selectedAgent && discoveryStep >= 3 && (
+          <section className="mb-10">
+            <div className="text-center mb-4">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                <span className="text-3xl">🔧</span>
+                Step 2: Select Tool
+              </h2>
+              <p className="text-gray-700 mt-1 text-sm sm:text-base">
+                Choose a tool from <span className="font-semibold text-green-700">{selectedAgent.name}</span>
+              </p>
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-6 sm:gap-8">
+              {selectedAgent.mcpServers?.[0]?.tools.map((tool) => (
+                <button
+                  key={tool.id}
+                  onClick={() => setSelectedTool(tool)}
+                  className={`group w-full max-w-xs sm:w-64 rounded-2xl p-5 text-left transition-all duration-300 ${
+                    selectedTool?.id === tool.id
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-2xl scale-105 ring-4 ring-green-300'
+                      : 'bg-white border border-green-200 hover:border-green-400 hover:shadow-lg hover:scale-105'
+                  }`}
+                >
+                  <div className="flex flex-col items-center text-center gap-2">
+                    {selectedTool?.id === tool.id && (
+                      <span className="text-3xl animate-ping">✓</span>
+                    )}
+                    <p className={`text-lg font-bold ${selectedTool?.id === tool.id ? 'text-white' : 'text-gray-900'}`}>
+                      {tool.name}
+                    </p>
+                    <p className={`text-xs sm:text-sm ${selectedTool?.id === tool.id ? 'text-white/90' : 'text-gray-700'}`}>
+                      {tool.description}
+                    </p>
+                    <div className={`mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+                      selectedTool?.id === tool.id
+                        ? 'bg-yellow-400 animate-pulse'
+                        : 'bg-gradient-to-r from-yellow-400 to-orange-400'
+                    }`}>
+                      <span className="text-2xl">💰</span>
+                      <span className="font-bold text-gray-900 text-base">{tool.baseCost} USDC</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* STEP 3: EXECUTION AND FLOW (unchanged logic, just layout kept centered) */}
+        {selectedAgent && selectedTool && (
+          <section className="mb-16">
+            <div className="text-center mb-4">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                <span className="text-3xl">⚡</span>
+                Step 3: Execute Transaction
+              </h2>
+              <p className="text-gray-700 mt-1 text-sm sm:text-base">
+                Watch the full ERC‑8004 + X402 payment and tool‑execution flow
+              </p>
+            </div>
+
+            <div className="max-w-4xl mx-auto">
+              <button
+                onClick={startDemo}
+                disabled={isExecuting}
+                className={`w-full py-5 text-xl sm:text-2xl font-bold rounded-2xl mb-6 transition-all duration-300 ${
+                  isExecuting
+                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-white hover:from-purple-600 hover:via-pink-600 hover:to-red-600 hover:scale-105 shadow-xl'
+                }`}
+              >
+                {isExecuting ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <span className="text-3xl sm:text-4xl animate-spin">⚡</span>
+                    Executing... {executionTime.toFixed(1)}s
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-3">
+                    <span className="text-3xl sm:text-4xl">🚀</span>
+                    Start Demo Execution
+                  </span>
+                )}
+              </button>
+
+              <div className="space-y-4">
+                {steps.map((step) => (
+                  <div
+                    key={step.id}
+                    className={`p-5 rounded-2xl border transition-all duration-500 ${
+                      step.status === 'completed'
+                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-400 shadow'
+                        : step.status === 'processing'
+                        ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-400 animate-pulse shadow'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        {step.status === 'completed' ? (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 flex items-center justify-center text-white font-bold text-xl">
+                            ✓
+                          </div>
+                        ) : step.status === 'processing' ? (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 flex items-center justify-center text-white font-bold text-xl animate-spin">
+                            ⟳
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 font-bold">
+                            {step.id}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">
+                          {step.title}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-gray-700 mb-2">{step.message}</p>
+                        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              step.status === 'completed'
+                                ? 'bg-gradient-to-r from-green-400 via-emerald-500 to-cyan-500'
+                                : 'bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500'
+                            }`}
+                            style={{ width: `${step.progress}%` }}
+                          />
+                        </div>
+
+                        {step.data && (
+                          <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200 text-xs sm:text-sm">
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div>
+                                <p className="text-gray-600">Base</p>
+                                <p className="font-bold text-blue-600">{step.data.baseCost}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Margin</p>
+                                <p className="font-bold text-purple-600">{step.data.margin}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Total</p>
+                                <p className="font-bold text-pink-600 text-base">
+                                  {step.data.total}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {showSuccess && (
+                <div className="mt-8 p-6 bg-gradient-to-r from-green-100 via-emerald-100 to-cyan-100 rounded-3xl border border-green-400 text-center shadow">
+                  <div className="text-5xl sm:text-6xl mb-3">🎉</div>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                    Execution Complete
+                  </h3>
+                  <p className="text-lg sm:text-xl text-green-700 mb-3">
+                    Finished in {executionTime.toFixed(1)} seconds
+                  </p>
+                </div>
+              )}
+
+              {totalCost && (
+                <div className="mt-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-3xl p-6 border border-purple-400 shadow">
+                  <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 flex items-center justify-center gap-2">
+                    <span className="text-3xl">💰</span>
+                    Cost Breakdown
+                  </h3>
+                  <div className="space-y-3 text-sm sm:text-base">
+                    <div className="flex justify-between items-center p-3 bg-blue-500 text-white rounded-2xl">
+                      <span>Base Cost</span>
+                      <span className="font-bold text-lg">{totalCost.baseCost} USDC</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-purple-500 text-white rounded-2xl">
+                      <span>Platform Margin</span>
+                      <span className="font-bold text-lg">{totalCost.margin} USDC</span>
+                    </div>
+                    <div className="flex justify-between items-center p-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl">
+                      <span className="font-semibold text-lg">Total Payment</span>
+                      <span className="font-bold text-2xl">{totalCost.total} USDC</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}

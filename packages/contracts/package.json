@@ -1,18 +1,34 @@
 {
   "name": "@travelwise/contracts",
   "version": "1.0.0",
+  "description": "TravelWise AI Agent Marketplace Smart Contracts",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.ts --network baseSepolia",
-    "test": "hardhat test"
+    "clean": "hardhat clean",
+    "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "deploy:all": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "deploy:agent-registry": "hardhat run scripts/deploy-agent-registry.ts --network baseSepolia",
+    "deploy:local": "hardhat run scripts/deploy-agent-registry.ts --network localhost",
+    "verify:agent-registry": "hardhat verify --network baseSepolia",
+    "node": "hardhat node",
+    "flatten": "hardhat flatten",
+    "size": "hardhat size-contracts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "@openzeppelin/contracts": "^4.9.3",
-    "hardhat": "^2.19.0",
-    "typescript": "^5.3.0"
+    "@nomicfoundation/hardhat-verify": "^2.0.3",
+    "@openzeppelin/contracts": "^5.0.1",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "@types/node": "^20.10.6",
+    "hardhat": "^2.19.4",
+    "hardhat-gas-reporter": "^1.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   },
   "dependencies": {
-    "dotenv": "^17.2.3"
+    "dotenv": "^16.3.1",
+    "ethers": "^6.9.2"
   }
 }

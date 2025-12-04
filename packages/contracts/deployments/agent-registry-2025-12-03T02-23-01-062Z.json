@@ -1,0 +1,32 @@
+{
+  "network": "baseSepolia",
+  "chainId": 84532,
+  "timestamp": "2025-12-03T02:23:01.061Z",
+  "deployer": "0xDC5ECB5a773dce39B7925Eb7c2838517ca4938D0",
+  "gasUsed": "1887044",
+  "contracts": {
+    "existingContracts": {
+      "identityRegistry": "0x34385Abba6b94F6c5f9e21840788Fde6B890aa14",
+      "reputationRegistry": "0x70Ec0A13bFFd8C33411d92afee7a17f0AF37E17A",
+      "paymentEscrow": "0x45cBA98635EdB7A15b1204d843Ac606d1B048a56"
+    },
+    "newContracts": {
+      "agentRegistry": {
+        "address": "0x8A8C21EaA055e1B26D79F33DCA065e7b5DcefE6B",
+        "txHash": "0xcd5623aba72ee2dfa92d80972c19e6029e2144a513e5bbfa27cd3ef2f9e5a657",
+        "blockNumber": 34480142,
+        "basescan": "https://sepolia.basescan.org/address/0x8A8C21EaA055e1B26D79F33DCA065e7b5DcefE6B"
+      }
+    }
+  },
+  "agents": [
+    {
+      "id": 1,
+      "name": "Travel Planning Expert",
+      "description": "Specialized in personalized travel itineraries",
+      "wallet": "0x1111111111111111111111111111111111111111",
+      "tokenURI": "https://raw.githubusercontent.com/taocodao/travelwise-marketplace/main/agent-cards/travel-planning-expert.json",
+      "txHash": "0x5dfbec1b94b56fbf8c68bf63cc4fe40c3f2454c70c1b678bfe3500ab3d04194d"
+    }
+  ]
+}

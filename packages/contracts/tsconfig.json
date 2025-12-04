@@ -2,22 +2,24 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
+    "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./",
     "composite": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node",
     "types": ["node"]
   },
   "include": [
-    "contracts/**/*.sol",
+    "contracts/**/*",
     "scripts/**/*.ts",
     "test/**/*.ts",
     "hardhat.config.ts"
@@ -26,10 +28,14 @@
     "node_modules",
     "dist",
     "cache",
-    "artifacts"
+    "artifacts",
+    "typechain-types"
   ],
   "ts-node": {
     "transpileOnly": true,
-    "files": true
+    "files": true,
+    "compilerOptions": {
+      "module": "commonjs"
+    }
   }
 }
