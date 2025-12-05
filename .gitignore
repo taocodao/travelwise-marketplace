@@ -40,3 +40,5 @@ docker-compose.override.yml
 # Secrets
 *.pem
 *.key
+.vercel
+.env*.local

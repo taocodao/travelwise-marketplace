@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,6 +8,10 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ============================================
+// CORE MODELS (Enhanced)
+// ============================================
 
 model Agent {
   id            String   @id @default(uuid())
@@ -25,21 +31,28 @@ model Agent {
 }
 
 model MCPServer {
-  id          String   @id @default(uuid())
-  agentId     String
-  name        String
-  description String
-  endpoint    String
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid())
+  agentId         String
+  name            String
+  description     String
+  endpoint        String
+  walletAddress   String?
+  totalEarnings   Decimal  @default(0) @db.Decimal(18, 6)
+  callCount       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  tools       Tool[]
-  executions  Execution[]
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tools           Tool[]
+  executions      Execution[]
+  transactions    Transaction[]
+  toolCalls       MCPToolCall[]
 
+  @@unique([walletAddress])
   @@index([agentId])
   @@index([endpoint])
+  @@index([walletAddress])
 }
 
 model Tool {
@@ -47,7 +60,7 @@ model Tool {
   mcpServerId  String
   name         String
   description  String
-  baseCost     Decimal  @db.Decimal(10, 6) // Cost in USDC
+  baseCost     Decimal  @db.Decimal(10, 6)
   inputSchema  Json
   outputSchema Json?
   isActive     Boolean  @default(true)
@@ -56,6 +69,7 @@ model Tool {
 
   mcpServer    MCPServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
   executions   Execution[]
+  toolCalls    MCPToolCall[]
 
   @@unique([mcpServerId, name])
   @@index([mcpServerId])
@@ -82,6 +96,7 @@ model Execution {
   agent           Agent    @relation(fields: [agentId], references: [id])
   mcpServer       MCPServer @relation(fields: [mcpServerId], references: [id])
   tool            Tool     @relation(fields: [toolId], references: [id])
+  transaction     Transaction? @relation(fields: [paymentTxHash], references: [txHash])
 
   @@index([agentId])
   @@index([paymentTxHash])
@@ -90,10 +105,10 @@ model Execution {
 
 model PricingConfig {
   id            String   @id @default(uuid())
-  marginPercent Decimal  @default(20) @db.Decimal(5, 2) // Default 20%
-  platformFee   Decimal  @default(1) @db.Decimal(5, 2)  // Default 1%
+  marginPercent Decimal  @default(20) @db.Decimal(5, 2)
+  platformFee   Decimal  @default(1) @db.Decimal(5, 2)
   updatedAt     DateTime @updatedAt
-  updatedBy     String   // Admin wallet address
+  updatedBy     String
 
   @@map("pricing_config")
 }
@@ -108,6 +123,149 @@ model WalletConfig {
 
   @@map("wallet_config")
 }
+
+// ============================================
+// BLOCKCHAIN INTEGRATION MODELS
+// ============================================
+
+model User {
+  id            String        @id @default(uuid())
+  walletAddress String        @unique
+  balance       Decimal       @default(0) @db.Decimal(18, 6)
+  nonce         Int           @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  transactions  Transaction[]
+  toolCalls     MCPToolCall[]
+  
+  @@index([walletAddress])
+  @@map("users")
+}
+
+model Transaction {
+  id              String   @id @default(uuid())
+  txHash          String   @unique
+  blockNumber     Int?
+  blockTimestamp  DateTime?
+  from            String
+  to              String
+  amount          Decimal  @db.Decimal(18, 6)
+  tokenAddress    String
+  toolName        String?
+  mcpServerId     String?
+  description     String
+  status          TransactionStatus @default(PENDING)
+  gasUsed         String?
+  gasPrice        String?
+  chainId         Int      @default(84532)
+  userId          String?
+  timestamp       DateTime @default(now())
+  confirmedAt     DateTime?
+  
+  user            User?     @relation(fields: [userId], references: [id])
+  mcpServer       MCPServer? @relation(fields: [mcpServerId], references: [id])
+  executions      Execution[]
+  toolCalls       MCPToolCall[]
+  
+  @@index([txHash])
+  @@index([from])
+  @@index([to])
+  @@index([userId])
+  @@index([mcpServerId])
+  @@index([status])
+  @@index([blockNumber])
+  @@map("transactions")
+}
+
+model MCPToolCall {
+  id              String   @id @default(uuid())
+  toolId          String
+  toolName        String
+  mcpServerId     String
+  userId          String?
+  transactionId   String?
+  executionId     String?
+  requestData     Json
+  responseData    Json?
+  cost            Decimal  @db.Decimal(10, 6)
+  executionTime   Int?
+  success         Boolean  @default(true)
+  errorMessage    String?
+  errorCode       String?
+  timestamp       DateTime @default(now())
+  
+  tool            Tool     @relation(fields: [toolId], references: [id])
+  mcpServer       MCPServer @relation(fields: [mcpServerId], references: [id])
+  user            User?    @relation(fields: [userId], references: [id])
+  transaction     Transaction? @relation(fields: [transactionId], references: [id])
+  
+  @@index([toolId])
+  @@index([mcpServerId])
+  @@index([userId])
+  @@index([transactionId])
+  @@index([timestamp])
+  @@map("mcp_tool_calls")
+}
+
+model BlockchainEvent {
+  id              String   @id @default(uuid())
+  eventType       String
+  contractAddress String
+  txHash          String
+  blockNumber     Int
+  logIndex        Int
+  eventData       Json
+  processed       Boolean  @default(false)
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  
+  @@unique([txHash, logIndex])
+  @@index([contractAddress])
+  @@index([eventType])
+  @@index([processed])
+  @@index([blockNumber])
+  @@map("blockchain_events")
+}
+
+model PaymentBatch {
+  id              String   @id @default(uuid())
+  batchTxHash     String   @unique
+  userId          String
+  totalAmount     Decimal  @db.Decimal(18, 6)
+  itemCount       Int
+  status          TransactionStatus @default(PENDING)
+  items           Json
+  createdAt       DateTime @default(now())
+  processedAt     DateTime?
+  
+  @@index([userId])
+  @@index([status])
+  @@map("payment_batches")
+}
+
+model ServerAnalytics {
+  id              String   @id @default(uuid())
+  mcpServerId     String
+  date            DateTime @db.Date
+  totalCalls      Int      @default(0)
+  successfulCalls Int      @default(0)
+  failedCalls     Int      @default(0)
+  totalRevenue    Decimal  @default(0) @db.Decimal(18, 6)
+  avgResponseTime Int?
+  uniqueUsers     Int      @default(0)
+  createdAt       DateTime @default(now())
+  
+  @@unique([mcpServerId, date])
+  @@index([mcpServerId])
+  @@index([date])
+  @@map("server_analytics")
+}
+
+// ============================================
+// ENUMS
+// ============================================
 
 enum PaymentStatus {
   PENDING
@@ -124,3 +282,10 @@ enum ExecutionStatus {
   FAILED
 }
 
+enum TransactionStatus {
+  PENDING
+  CONFIRMING
+  CONFIRMED
+  FAILED
+  REVERTED
+}
