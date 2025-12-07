@@ -15,7 +15,9 @@
     "dev:contracts": "npm run compile --workspace=packages/contracts",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "clean": "Get-ChildItem -Path . -Include node_modules,dist,build,.next -Recurse -Directory | Remove-Item -Recurse -Force"
+    "clean": "Get-ChildItem -Path . -Include node_modules,dist,build,.next -Recurse -Directory | Remove-Item -Recurse -Force",
+    "start": "node start.js",
+    "mcp": "node start.js"
   },
   "devDependencies": {
     "@types/minimatch": "^6.0.0",

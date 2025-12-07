@@ -9,6 +9,8 @@ import marketplaceRoutes from './routes/marketplace';
 import paymentsRoutes from './routes/payments';
 import agentsRoutes from './routes/agents';
 import { errorHandler } from './middleware/errorHandler';
+import aiAgentRoutes from './routes/aiAgent.routes';
+
 
 dotenv.config();
 
@@ -43,6 +45,11 @@ app.use('/api/agents', agentsRoutes);
 
 // Error handling
 app.use(errorHandler);
+
+
+// ... existing code ...
+
+app.use('/api/ai-agent', aiAgentRoutes);
 
 // Start server
 const server = app.listen(PORT, () => {
