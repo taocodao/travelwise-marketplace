@@ -1,0 +1,45 @@
+# Use puppeteer-ready base image for headless Chrome support
+FROM ghcr.io/puppeteer/puppeteer:24.4.0
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# Switch to root for installations
+USER root
+
+WORKDIR /app
+
+# Copy package files
+COPY packages/mcp-servers/gemini-file-search/package*.json ./
+
+# Install dependencies
+RUN npm ci --omit=dev
+
+# Copy source code
+COPY packages/mcp-servers/gemini-file-search/src ./src
+COPY packages/mcp-servers/gemini-file-search/tsconfig.json ./
+COPY packages/mcp-servers/gemini-file-search/prisma ./prisma
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build TypeScript
+RUN npm run build
+
+# Create uploads directory
+RUN mkdir -p /app/uploads && chmod 777 /app/uploads
+
+# Switch back to non-root user for security
+USER pptruser
+
+# Expose port
+EXPOSE 3005
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3005/health || exit 1
+
+# Start server
+CMD ["node", "dist/index.js"]
