@@ -3,8 +3,6 @@ FROM ghcr.io/puppeteer/puppeteer:24.4.0
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-# Let Puppeteer auto-detect Chrome from the bundled installation
 # Increase Node.js memory limit to prevent OOM crashes
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
@@ -21,6 +19,9 @@ COPY packages/mcp-servers/gemini-file-search/package*.json ./
 
 # Install ALL dependencies (including dev for TypeScript build)
 RUN npm ci
+
+# Install Chrome for Puppeteer
+RUN npx puppeteer browsers install chrome
 
 # Copy source code
 COPY packages/mcp-servers/gemini-file-search/src ./src
