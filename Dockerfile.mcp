@@ -1,12 +1,15 @@
 # Use puppeteer-ready base image for headless Chrome support
+# This image includes Chrome for Testing pre-installed
 FROM ghcr.io/puppeteer/puppeteer:24.4.0
 
 # Set environment variables
 ENV NODE_ENV=production
 # Increase Node.js memory limit to prevent OOM crashes
 ENV NODE_OPTIONS="--max-old-space-size=2048"
+# Tell Puppeteer to use the bundled Chrome (pptruser's cache)
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
 
-# Switch to root for installations
+# Switch to root for system installations
 USER root
 
 WORKDIR /app
@@ -18,10 +21,9 @@ RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/
 COPY packages/mcp-servers/gemini-file-search/package*.json ./
 
 # Install ALL dependencies (including dev for TypeScript build)
+# Skip Puppeteer's Chrome download since base image has it
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 RUN npm ci
-
-# Install Chrome for Puppeteer
-RUN npx puppeteer browsers install chrome
 
 # Copy source code
 COPY packages/mcp-servers/gemini-file-search/src ./src
@@ -37,10 +39,13 @@ RUN npm run build
 # Remove dev dependencies after build
 RUN npm prune --production
 
-# Create uploads directory
+# Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && chmod 777 /app/uploads
 
-# Switch back to non-root user for security
+# Give pptruser ownership of the app directory
+RUN chown -R pptruser:pptruser /app
+
+# Switch back to pptruser (has Chrome access)
 USER pptruser
 
 # Expose port
@@ -53,4 +58,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 # Use dumb-init to properly forward signals to Node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "dist/index.js"]
-
