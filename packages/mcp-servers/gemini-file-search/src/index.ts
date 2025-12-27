@@ -2810,10 +2810,10 @@ Format your response clearly with sections for:
 
     let browser;
     try {
-      // Use Puppeteer for JavaScript rendering
+      // Try Puppeteer first for JavaScript rendering
       browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
       });
       const page = await browser.newPage();
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
@@ -2835,9 +2835,38 @@ Format your response clearly with sections for:
       }
       
       return await this.addSource(notebookId, 'website', title, content.substring(0, 100000), url);
-    } catch (error: any) {
-      if (browser) await browser.close();
-      return { success: false, error: `Failed to fetch website: ${error.message}` };
+    } catch (puppeteerError: any) {
+      if (browser) try { await browser.close(); } catch {}
+      
+      // Fallback: Use simple HTTP fetch with cheerio
+      console.log(`Puppeteer failed (${puppeteerError.message}), falling back to HTTP fetch`);
+      try {
+        const cheerio = await import('cheerio');
+        const response = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
+        
+        if (!response.ok) {
+          return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        
+        const html = await response.text();
+        const $ = cheerio.load(html);
+        
+        // Remove unwanted elements
+        $('script, style, nav, footer, header, aside, [role="navigation"]').remove();
+        
+        const title = $('title').text() || new URL(url).hostname;
+        const content = $('body').text().replace(/\s+/g, ' ').trim();
+        
+        if (!content || content.length < 50) {
+          return { success: false, error: 'Could not extract content from website' };
+        }
+        
+        return await this.addSource(notebookId, 'website', title, content.substring(0, 100000), url);
+      } catch (fetchError: any) {
+        return { success: false, error: `Failed to fetch website: ${fetchError.message}` };
+      }
     }
   }
 
