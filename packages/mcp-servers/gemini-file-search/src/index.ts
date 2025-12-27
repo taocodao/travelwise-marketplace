@@ -634,9 +634,10 @@ class GeminiFileSearchMCPServer {
         ? content.substring(0, maxChars) + '\n\n[... content truncated for translation ...]'
         : content;
 
-      const response = await genaiClient.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: `You are a professional translator.
+      const result = await this.genaiModel.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [{ text: `You are a professional translator.
 
 TASK: Translate the following content into ${targetLanguage}.
 
@@ -650,10 +651,11 @@ INSTRUCTIONS:
 CONTENT TO TRANSLATE:
 ${truncatedContent}
 
-TRANSLATED CONTENT IN ${targetLanguage.toUpperCase()}:`,
+TRANSLATED CONTENT IN ${targetLanguage.toUpperCase()}:` }]
+        }],
       });
 
-      const translatedText = response?.text || '';
+      const translatedText = result.response.text();
       
       if (!translatedText.trim()) {
         throw new Error('Empty translation response from Gemini');

@@ -42,3 +42,4 @@ docker-compose.override.yml
 *.key
 .vercel
 .env*.local
+named-dialect-*.json
