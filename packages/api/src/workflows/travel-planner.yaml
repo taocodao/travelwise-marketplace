@@ -1,0 +1,114 @@
+# Travel Planner Workflow
+# 
+# This workflow combines weather, packing advice, and place discovery
+# to create a comprehensive travel plan.
+#
+# Usage:
+#   POST /workflows with this content
+#   POST /workflows/travel-planner/execute { destination: "Tokyo", interests: "quiet cafes" }
+
+name: travel-planner
+description: Plan a complete trip with weather, places, and packing advice
+version: "1.0.0"
+
+creator:
+  address: "0x0000000000000000000000000000000000000000"
+  name: "TravelWise Team"
+  revenueShare: 70
+
+pricing:
+  basePrice: 0.10
+  currency: USDC
+  dynamicPricing: true
+
+inputs:
+  - name: destination
+    type: string
+    description: Travel destination city
+    required: true
+  - name: interests
+    type: string
+    description: What you're interested in (cafes, restaurants, etc)
+    required: false
+    default: "places to visit"
+  - name: days
+    type: number
+    description: Trip duration in days
+    required: false
+    default: 7
+
+steps:
+  - id: get_weather
+    name: Get Weather Forecast
+    type: mcp_tool
+    tool:
+      server: weather
+      function: get_weather_forecast
+      params:
+        location: "{{input.destination}}"
+        days: "{{input.days}}"
+    estimatedCost: 0.02
+
+  - id: analyze_packing
+    name: Packing Recommendations
+    type: ai_decision
+    dependsOn:
+      - get_weather
+    ai:
+      prompt: |
+        Based on the weather forecast for {{input.destination}}:
+        {{steps.get_weather}}
+        
+        What should someone pack for a {{input.days}} day trip?
+        Provide a concise packing list with essentials.
+      outputFormat: text
+    estimatedCost: 0.02
+
+  - id: find_places
+    name: Find Places
+    type: mcp_tool
+    tool:
+      server: semantic_search
+      function: semantic_search
+      params:
+        query: "{{input.interests}} in {{input.destination}}"
+        limit: 5
+    estimatedCost: 0.03
+
+  - id: create_plan
+    name: Create Travel Plan
+    type: ai_decision
+    dependsOn:
+      - get_weather
+      - analyze_packing
+      - find_places
+    ai:
+      prompt: |
+        Create a brief travel plan for {{input.destination}} ({{input.days}} days):
+        
+        WEATHER:
+        {{steps.get_weather.forecast}}
+        
+        PACKING:
+        {{steps.analyze_packing}}
+        
+        PLACES TO VISIT:
+        {{steps.find_places.results}}
+        
+        Format as a helpful travel summary with:
+        1. Weather overview
+        2. Packing essentials
+        3. Top 3 recommended places
+      outputFormat: text
+    estimatedCost: 0.02
+
+output:
+  template: "{{steps.create_plan}}"
+
+tags:
+  - travel
+  - planning
+  - weather
+
+category: travel
+isPublic: true

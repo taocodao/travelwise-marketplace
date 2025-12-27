@@ -1,0 +1,5 @@
+Starting Test
+Testing Analyze...
+Health: {"status":"ok","service":"Agentic MCP Generator"}
+Test Failed: Request failed with status code 500 [Code: ERR_BAD_RESPONSE]
+Response data: {"success":false,"error":"401 Incorrect API key provided: dummy. You can find your API key at https://platform.openai.com/account/api-keys."}

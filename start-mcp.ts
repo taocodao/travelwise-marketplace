@@ -34,6 +34,12 @@ const servers = [
     dir: 'packages/mcp-servers/travel-agent',
     port: 3005,
     env: { ...env, PORT: '3005' }
+  },
+  {
+    name: 'MCP Generator',
+    dir: 'packages/mcp-servers/mcp-generator',
+    port: 3006,
+    env: { ...env, PORT: '3006' }
   }
 ];
 

@@ -8,6 +8,8 @@
     "test": "hardhat test",
     "test:gas": "REPORT_GAS=true hardhat test",
     "deploy:all": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "deploy:x402": "hardhat run scripts/deploy-x402.ts --network baseSepolia",
+    "deploy:mcp-payment": "hardhat run scripts/deploy-mcp-payment.ts --network baseSepolia",
     "deploy:agent-registry": "hardhat run scripts/deploy-agent-registry.ts --network baseSepolia",
     "deploy:local": "hardhat run scripts/deploy-agent-registry.ts --network localhost",
     "verify:agent-registry": "hardhat verify --network baseSepolia",

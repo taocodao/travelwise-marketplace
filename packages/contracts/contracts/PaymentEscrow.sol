@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
@@ -42,7 +42,7 @@ contract PaymentEscrow is ReentrancyGuard, Ownable {
         uint256 amount
     );
 
-    constructor(address _usdc) {
+    constructor(address _usdc) Ownable(msg.sender) {
         require(_usdc != address(0), "Invalid USDC address");
         usdc = IERC20(_usdc);
     }

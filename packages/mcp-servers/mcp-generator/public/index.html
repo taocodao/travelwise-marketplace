@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Generator - Admin Panel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; }
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+    .glow { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+    .chat-bubble { max-width: 80%; }
+    .chat-bubble p { margin: 0.5em 0; }
+    .chat-bubble code { background: rgba(0,0,0,0.3); padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; }
+    .chat-bubble pre { background: rgba(0,0,0,0.3); padding: 0.5em; border-radius: 6px; overflow-x: auto; }
+    .chat-bubble ul, .chat-bubble ol { margin-left: 1.5em; }
+  </style>
+</head>
+<body class="text-white font-sans">
+  <div class="max-w-4xl mx-auto p-8">
+    <header class="mb-8 text-center">
+      <div class="flex justify-center gap-4 mb-4">
+        <a href="/test.html" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium">
+          🧪 Open Test Hub
+        </a>
+      </div>
+      <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+        ✨ Agentic MCP Generator
+      </h1>
+      <p class="text-gray-400 mt-2">Search for any API and convert it to an MCP Server</p>
+    </header>
+
+    <!-- Step 1: Search -->
+    <section id="step1" class="glass rounded-xl p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <span class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm">1</span>
+        Search for an API
+      </h2>
+      <div class="flex gap-3">
+        <input type="text" id="searchQuery" placeholder="e.g., Google Maps API, Stripe payments, weather API..."
+          class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <button onclick="searchApi()" id="searchBtn"
+          class="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-lg font-medium transition-all disabled:opacity-50">
+          🔍 Search
+        </button>
+      </div>
+      <div id="error" class="mt-4 p-4 bg-red-900/50 border border-red-500 rounded-lg hidden"></div>
+    </section>
+
+    <!-- Step 2: Search Results -->
+    <section id="step2" class="glass rounded-xl p-6 mb-6 hidden">
+      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <span class="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">2</span>
+        Found APIs
+      </h2>
+      <p id="searchSummary" class="text-gray-400 mb-4"></p>
+      <div id="searchResults" class="space-y-3"></div>
+    </section>
+
+    <!-- Step 3: Chat & Analysis -->
+    <section id="step3" class="glass rounded-xl p-6 mb-6 hidden">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold flex items-center gap-2">
+          <span class="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm">3</span>
+          Chat with AI about this API
+        </h2>
+        <div class="flex gap-2">
+          <button onclick="toggleChatSize()" id="expandBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm flex items-center gap-1">
+            <span id="expandIcon">⬆️</span> <span id="expandText">Expand</span>
+          </button>
+          <button onclick="toggleFullscreen()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm">
+            🔲 Fullscreen
+          </button>
+        </div>
+      </div>
+      
+      <!-- Chat Messages (expandable) -->
+      <div id="chatMessages" class="h-64 overflow-y-auto bg-gray-900/50 rounded-lg p-4 mb-4 space-y-3 transition-all duration-300" style="min-height: 16rem;">
+        <div class="chat-bubble bg-indigo-600/50 p-3 rounded-lg">
+          <strong>AI:</strong> I found the API! Ask me about its features or which endpoints you want to convert.
+        </div>
+      </div>
+      
+      <!-- Chat Input -->
+      <div class="flex gap-3">
+        <input type="text" id="chatInput" placeholder="Ask about this API or select functions..."
+          class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          onkeypress="if(event.key==='Enter')sendChat()">
+        <button onclick="sendChat()" id="chatBtn"
+          class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-medium transition-all">
+          Send
+        </button>
+      </div>
+
+      <!-- Manual Spec URL Input -->
+      <div id="manualUrlSection" class="mt-4 p-4 bg-yellow-900/30 border border-yellow-600/50 rounded-lg">
+        <p class="text-yellow-400 text-sm mb-2">💡 Can't find the spec? Enter the OpenAPI/Swagger URL directly:</p>
+        <div class="flex gap-2">
+          <input type="text" id="manualSpecUrl" placeholder="https://raw.githubusercontent.com/.../openapi.json"
+            class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
+          <button onclick="analyzeManualUrl()" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg text-sm font-medium">
+            Analyze
+          </button>
+        </div>
+        <p class="text-gray-500 text-xs mt-2">Known sources: <a href="https://github.com/googlemaps/openapi-specification" target="_blank" class="text-blue-400 hover:underline">Google Maps</a>, <a href="https://github.com/stripe/openapi" target="_blank" class="text-blue-400 hover:underline">Stripe</a></p>
+      </div>
+
+      <!-- Analysis Result (shown after analyze) -->
+      <div id="analysisResult" class="mt-6 hidden">
+        <h3 class="font-medium mb-2">Detected Endpoints (<span id="endpointCount"></span>)</h3>
+        <div id="endpoints" class="max-h-40 overflow-y-auto border border-gray-700 rounded-lg divide-y divide-gray-700"></div>
+        <button onclick="generateServer()" id="generateBtn"
+          class="w-full mt-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 py-4 rounded-lg font-bold text-lg transition-all glow disabled:opacity-50">
+          🚀 Generate & Deploy MCP Server
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 4: Success -->
+    <section id="step4" class="glass rounded-xl p-6 mb-6 hidden">
+      <div class="text-center">
+        <div class="text-6xl mb-4">🎉</div>
+        <h2 class="text-2xl font-bold text-green-400 mb-2">Server Deployed Successfully!</h2>
+        <p class="text-gray-300 mb-4">Your MCP server is ready at:</p>
+        <code id="serverPath" class="block bg-gray-900 p-4 rounded-lg font-mono text-sm mb-6"></code>
+      </div>
+      
+      <!-- API Key Input -->
+      <div class="bg-gray-800/50 rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+          <span>🔑</span> Configure API Key
+        </h3>
+        <p class="text-gray-400 text-sm mb-4">Enter your API key to test the server (stored locally in browser):</p>
+        <div class="flex gap-3">
+          <input type="password" id="apiKeyInput" placeholder="Enter your API key..."
+            class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500">
+          <button onclick="saveApiKey()" 
+            class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-medium transition-all">
+            💾 Save
+          </button>
+        </div>
+        <p id="apiKeySaved" class="text-green-400 text-sm mt-2 hidden">✓ API key saved!</p>
+      </div>
+      
+      <div class="flex gap-4 justify-center">
+        <button id="testServerBtn" onclick="openTestPage()" 
+          class="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 px-8 py-4 rounded-lg font-bold text-lg transition-all">
+          🧪 Test Server
+        </button>
+        <button onclick="location.reload()" 
+          class="bg-gray-700 hover:bg-gray-600 px-8 py-4 rounded-lg font-bold transition-all">
+          🔄 Generate Another
+        </button>
+      </div>
+    </section>
+
+    <!-- Log -->
+    <section class="glass rounded-xl p-6">
+      <h2 class="text-lg font-semibold mb-3">📋 Activity Log</h2>
+      <div id="log" class="bg-gray-900/50 rounded-lg p-4 font-mono text-sm h-32 overflow-y-auto text-gray-400">
+        <div>Ready. Enter a search query to find an API.</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const GEN_API = 'http://localhost:3006';
+    let currentAnalysis = null;
+    let selectedApiUrl = null;
+    let sessionId = 'session_' + Date.now();
+
+    function log(msg, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const colors = { info: 'text-gray-300', success: 'text-green-400', error: 'text-red-400' };
+      logDiv.innerHTML += `<div class="${colors[type]}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function showError(msg) {
+      const errDiv = document.getElementById('error');
+      errDiv.textContent = msg;
+      errDiv.classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('error').classList.add('hidden');
+    }
+
+    async function searchApi() {
+      const query = document.getElementById('searchQuery').value.trim();
+      if (!query) return showError('Please enter a search query');
+      hideError();
+
+      const btn = document.getElementById('searchBtn');
+      btn.disabled = true;
+      btn.textContent = 'Searching...';
+      log(`Searching for: ${query}`, 'info');
+
+      try {
+        const res = await fetch(`${GEN_API}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        log(`Found ${data.results?.length || 0} APIs`, 'success');
+        document.getElementById('searchSummary').textContent = data.summary;
+
+        const resultsDiv = document.getElementById('searchResults');
+        resultsDiv.innerHTML = (data.results || []).map((api, i) => `
+          <div class="bg-gray-800 p-4 rounded-lg cursor-pointer hover:bg-gray-700 transition-all ${api.specUrl ? '' : 'opacity-60'}" onclick="${api.specUrl ? `selectApi(${i}, '${api.specUrl}', '${api.apiName}')` : `alert('No valid spec URL found. Use manual input below.')`}">
+            <h3 class="font-bold text-lg text-indigo-400">${api.apiName}</h3>
+            <p class="text-gray-400 text-sm">${api.description}</p>
+            <div class="flex items-center gap-2 mt-2">
+              ${api.specUrl 
+                ? `<span class="text-green-400 text-xs">✅ Verified spec URL</span>` 
+                : api.urlError 
+                  ? `<span class="text-red-400 text-xs">❌ URL Error: ${api.urlError}</span>`
+                  : `<span class="text-yellow-400 text-xs">⚠️ No spec URL found</span>`
+              }
+            </div>
+            <a href="${api.docsUrl}" target="_blank" class="text-blue-400 text-xs hover:underline">${api.docsUrl}</a>
+          </div>
+        `).join('');
+
+        document.getElementById('step2').classList.remove('hidden');
+      } catch (err) {
+        log(`Search error: ${err.message}`, 'error');
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔍 Search';
+      }
+    }
+
+    let currentResearch = null;
+    let selectedApiName = null;
+
+    async function selectApi(index, url, name) {
+      selectedApiUrl = url;
+      selectedApiName = name;
+      log(`Selected: ${name}`, 'info');
+      document.getElementById('step3').classList.remove('hidden');
+
+      // Start chat with context
+      addChatMessage('assistant', `Great choice! Let me research **${name}** to understand its use cases and check for existing MCP implementations...`);
+      
+      // Run deep research automatically
+      await runDeepResearch(name);
+
+      // Try to auto-analyze if we have a spec URL
+      if (url && (url.includes('swagger') || url.includes('openapi') || url.endsWith('.json') || url.endsWith('.yaml'))) {
+        await analyzeApi(url);
+      }
+    }
+
+    async function runDeepResearch(apiName) {
+      log('Running deep research...', 'info');
+      
+      try {
+        const res = await fetch(`${GEN_API}/research`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiName })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          currentResearch = data;
+          log('Research complete!', 'success');
+          
+          // Show research results in chat
+          let msg = `## 📊 Research Complete for **${apiName}**\n\n`;
+          
+          if (data.typicalUseCases?.length) {
+            msg += `### Typical Use Cases\n`;
+            data.typicalUseCases.forEach(uc => msg += `- ${uc}\n`);
+          }
+          
+          if (data.majorFunctions?.length) {
+            msg += `\n### Major Functions\n`;
+            data.majorFunctions.forEach(f => msg += `- ${f}\n`);
+          }
+          
+          if (data.existingMcpServers?.length) {
+            msg += `\n### ⚠️ Existing MCP Servers Found\n`;
+            data.existingMcpServers.forEach(s => msg += `- **${s.name}**: ${s.description} ([Link](${s.url}))\n`);
+          }
+          
+          if (data.suggestedFunctions?.length) {
+            msg += `\n### 💡 Suggested Functions to Implement\n`;
+            data.suggestedFunctions.forEach(f => msg += `- ${f}\n`);
+          }
+          
+          // NEW: Real-world Use Cases
+          if (data.realWorldUseCases?.length) {
+            msg += `\n---\n## 🎯 Real-World Use Cases\n\n`;
+            data.realWorldUseCases.forEach((uc, i) => {
+              msg += `### ${i+1}. ${uc.name}\n`;
+              msg += `**Scenario:** ${uc.scenario}\n\n`;
+              msg += `**Agent Workflow:**\n`;
+              uc.workflow.forEach((step, j) => msg += `${j+1}. ${step}\n`);
+              msg += `\n**Business Value:** ${uc.businessValue}\n\n`;
+            });
+          }
+          
+          // NEW: Implementation Patterns
+          if (data.implementationPatterns?.length) {
+            msg += `\n---\n## 🔧 Implementation Patterns\n\n`;
+            data.implementationPatterns.forEach(p => {
+              msg += `### ${p.name}\n`;
+              msg += `${p.description}\n\n`;
+              msg += `**Best for:** ${p.bestFor}\n\n`;
+            });
+          }
+          
+          // NEW: Security Best Practices
+          if (data.securityBestPractices?.length) {
+            msg += `\n---\n## 🔒 Security Best Practices\n\n`;
+            data.securityBestPractices.forEach(t => msg += `- ${t}\n`);
+          }
+          
+          // NEW: Cost Optimization
+          if (data.costOptimization?.length) {
+            msg += `\n---\n## 💰 Cost Optimization\n\n`;
+            data.costOptimization.forEach(t => msg += `- ${t}\n`);
+          }
+          
+          msg += `\n---\n### ⬆️ Click "Expand" or "Fullscreen" above for better viewing!\n\nWhich functions would you like me to implement? Or type "analyze" to fetch the API spec.`;
+          
+          addChatMessage('assistant', msg);
+        }
+      } catch (err) {
+        log(`Research failed: ${err.message}`, 'error');
+        addChatMessage('assistant', `Research failed: ${err.message}. Let's proceed with analysis.`);
+      }
+    }
+
+    function addChatMessage(role, content) {
+      const chatDiv = document.getElementById('chatMessages');
+      const isUser = role === 'user';
+      // Parse markdown for AI messages
+      const renderedContent = isUser ? content : marked.parse(content);
+      chatDiv.innerHTML += `
+        <div class="chat-bubble ${isUser ? 'bg-gray-700 ml-auto' : 'bg-indigo-600/50'} p-3 rounded-lg">
+          <strong>${isUser ? 'You' : 'AI'}:</strong> <span class="markdown-content">${renderedContent}</span>
+        </div>
+      `;
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
+
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      addChatMessage('user', message);
+      input.value = '';
+
+      // Check for analyze command
+      if (message.toLowerCase().includes('analyze') && selectedApiUrl) {
+        await analyzeApi(selectedApiUrl);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${GEN_API}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            message,
+            apiContext: currentAnalysis ? JSON.stringify(currentAnalysis) : ''
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        addChatMessage('assistant', data.response);
+      } catch (err) {
+        addChatMessage('assistant', `Error: ${err.message}`);
+      }
+    }
+
+    async function analyzeApi(url) {
+      log(`Analyzing API at ${url}...`, 'info');
+      addChatMessage('assistant', '⏳ Analyzing the API spec...');
+
+      try {
+        const res = await fetch(`${GEN_API}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiEndpoint: url })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        currentAnalysis = data.analysis;
+        log(`Found ${currentAnalysis.endpoints.length} endpoints`, 'success');
+        addChatMessage('assistant', `✅ Found **${currentAnalysis.endpoints.length}** endpoints! You can review them below or ask me about specific ones.`);
+
+        // Show endpoints
+        document.getElementById('endpointCount').textContent = currentAnalysis.endpoints.length;
+        document.getElementById('endpoints').innerHTML = currentAnalysis.endpoints.map(ep => `
+          <div class="p-2 flex justify-between text-sm">
+            <span class="font-mono ${getMethodColor(ep.method)}">${ep.method} ${ep.path}</span>
+            <span class="text-gray-500">${ep.summary || ''}</span>
+          </div>
+        `).join('');
+        document.getElementById('analysisResult').classList.remove('hidden');
+      } catch (err) {
+        log(`Analysis failed: ${err.message}`, 'error');
+        addChatMessage('assistant', `❌ Analysis failed: ${err.message}. You may need to provide a direct Swagger/OpenAPI URL.`);
+      }
+    }
+
+    async function analyzeManualUrl() {
+      const url = document.getElementById('manualSpecUrl').value.trim();
+      if (!url) return;
+      
+      selectedApiUrl = url;
+      log(`Manual URL provided: ${url}`, 'info');
+      await analyzeApi(url);
+    }
+
+    let bestPractices = null;
+
+    async function generateServer() {
+      if (!currentAnalysis) return;
+
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.textContent = '📚 Researching best practices...';
+      log('Researching best practices for this API...', 'info');
+
+      try {
+        // Step 1: Fetch best practices
+        const bpRes = await fetch(`${GEN_API}/best-practices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiName: currentAnalysis.name })
+        });
+        const bpData = await bpRes.json();
+        
+        if (bpData.success && bpData.practices) {
+          bestPractices = bpData.practices;
+          log('Found best practices!', 'success');
+          
+          // Show best practices for confirmation
+          showBestPracticesModal(bpData.summary, bpData.practices);
+        } else {
+          // No practices found, proceed anyway
+          await proceedWithGeneration();
+        }
+      } catch (err) {
+        log(`Best practices lookup failed: ${err.message}`, 'error');
+        // Proceed without best practices
+        if (confirm('Could not fetch best practices. Proceed with generation anyway?')) {
+          await proceedWithGeneration();
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Generate & Deploy MCP Server';
+      }
+    }
+
+    function showBestPracticesModal(summary, practices) {
+      const modal = document.createElement('div');
+      modal.id = 'bpModal';
+      modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4';
+      modal.innerHTML = `
+        <div class="bg-gray-900 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+          <h2 class="text-2xl font-bold text-indigo-400 mb-4">📚 Best Practices Found</h2>
+          <p class="text-gray-300 mb-4">${summary}</p>
+          
+          <div class="space-y-3 text-sm">
+            <div class="bg-gray-800 p-3 rounded-lg">
+              <strong class="text-yellow-400">🔒 Authentication:</strong>
+              <p class="text-gray-300">${practices.authentication}</p>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+              <strong class="text-blue-400">⏱️ Rate Limiting:</strong>
+              <p class="text-gray-300">${practices.rateLimiting}</p>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+              <strong class="text-red-400">⚠️ Error Handling:</strong>
+              <p class="text-gray-300">${practices.errorHandling}</p>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+              <strong class="text-green-400">📄 Pagination:</strong>
+              <p class="text-gray-300">${practices.pagination}</p>
+            </div>
+            ${practices.securityTips?.length ? `
+            <div class="bg-gray-800 p-3 rounded-lg">
+              <strong class="text-purple-400">🛡️ Security Tips:</strong>
+              <ul class="list-disc list-inside text-gray-300">
+                ${practices.securityTips.map(t => `<li>${t}</li>`).join('')}
+              </ul>
+            </div>` : ''}
+          </div>
+          
+          <div class="flex gap-3 mt-6">
+            <button onclick="closeModalAndGenerate()" class="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold">
+              ✅ Confirm & Generate
+            </button>
+            <button onclick="closeModal()" class="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg">
+              Cancel
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    function closeModal() {
+      document.getElementById('bpModal')?.remove();
+    }
+
+    async function closeModalAndGenerate() {
+      closeModal();
+      await proceedWithGeneration();
+    }
+
+    async function proceedWithGeneration() {
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      
+      try {
+        const serverName = currentAnalysis.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        
+        // Step 1: Check for existing server
+        btn.textContent = '🔍 Checking existing...';
+        log('Checking for existing server...', 'info');
+        
+        const existingRes = await fetch(`${GEN_API}/check-existing/${serverName}`);
+        const existing = await existingRes.json();
+        
+        if (existing.exists) {
+          const overwrite = confirm(`⚠️ An MCP server named "${serverName}" already exists!\n\nFiles: ${existing.files.join(', ')}\n\nOverwrite it?`);
+          if (!overwrite) {
+            log('Generation cancelled by user', 'info');
+            return;
+          }
+          log('User chose to overwrite existing server', 'info');
+        }
+        
+        // Step 2: Deep research + Generation
+        btn.textContent = '🔬 Generating...';
+        log('Generating MCP server with deep research...', 'info');
+        
+        const chatDiv = document.getElementById('chatMessages');
+        const chatHistory = chatDiv.innerText.replace(/AI:|You:/g, '\n').trim();
+        
+        const res = await fetch(`${GEN_API}/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiEndpoint: selectedApiUrl,
+            serverName,
+            selectedTools: currentAnalysis.endpoints,
+            bestPractices: bestPractices,
+            chatHistory: chatHistory
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        log(`Deployed to ${data.path}`, 'success');
+        
+        // Store the server name for test page
+        window.generatedServerName = serverName;
+        
+        // Step 3: Get API key instructions
+        btn.textContent = '🔑 Getting API key info...';
+        await showApiKeySetup(serverName);
+        
+        // Step 4: Generate test cases
+        btn.textContent = '🧪 Generating tests...';
+        await generateAndShowTestCases(serverName);
+        
+        // Show success
+        document.getElementById('serverPath').textContent = data.path;
+        document.getElementById('step4').classList.remove('hidden');
+        
+      } catch (err) {
+        log(`Generation failed: ${err.message}`, 'error');
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Generate & Deploy MCP Server';
+      }
+    }
+
+    async function showApiKeySetup(serverName) {
+      try {
+        const res = await fetch(`${GEN_API}/api-key-instructions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiName: selectedApiName || serverName })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          let msg = `## 🔑 API Key Setup\n\n`;
+          msg += `**Instructions:** ${data.instructions}\n\n`;
+          if (data.signupUrl) msg += `**Signup URL:** [${data.signupUrl}](${data.signupUrl})\n\n`;
+          msg += `**Pricing:** ${data.pricing}\n`;
+          msg += `**Free Tier:** ${data.freeTier}\n\n`;
+          msg += `Add your API key to \`.env\`:\n\`\`\`\n${serverName.toUpperCase().replace(/-/g, '_')}_API_KEY=your_key_here\n\`\`\``;
+          
+          addChatMessage('assistant', msg);
+          log('API key instructions loaded', 'success');
+        }
+      } catch (err) {
+        log(`API key instructions failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function generateAndShowTestCases(serverName) {
+      try {
+        const tools = currentAnalysis.endpoints.map(e => e.path || e.toolName);
+        const res = await fetch(`${GEN_API}/test-cases`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiName: selectedApiName || serverName, tools })
+        });
+        const data = await res.json();
+        
+        if (data.success && data.testCases?.length) {
+          let msg = `## 🧪 Test Cases\n\n`;
+          data.testCases.forEach((tc, i) => {
+            msg += `### ${i+1}. ${tc.name}\n`;
+            msg += `${tc.description}\n\n`;
+            msg += `**Tool:** \`${tc.toolName}\`\n`;
+            msg += `**Input:**\n\`\`\`json\n${JSON.stringify(tc.exampleInput, null, 2)}\n\`\`\`\n`;
+            msg += `**Expected:** ${tc.expectedBehavior}\n\n`;
+          });
+          
+          addChatMessage('assistant', msg);
+          log(`Generated ${data.testCases.length} test cases`, 'success');
+        }
+      } catch (err) {
+        log(`Test case generation failed: ${err.message}`, 'error');
+      }
+    }
+
+    // Chat size states
+    let chatExpanded = false;
+    let chatFullscreen = false;
+
+    function toggleChatSize() {
+      const chatDiv = document.getElementById('chatMessages');
+      chatExpanded = !chatExpanded;
+      
+      if (chatExpanded) {
+        chatDiv.style.height = '32rem';
+        document.getElementById('expandIcon').textContent = '⬇️';
+        document.getElementById('expandText').textContent = 'Collapse';
+      } else {
+        chatDiv.style.height = '16rem';
+        document.getElementById('expandIcon').textContent = '⬆️';
+        document.getElementById('expandText').textContent = 'Expand';
+      }
+    }
+
+    function toggleFullscreen() {
+      const step3 = document.getElementById('step3');
+      chatFullscreen = !chatFullscreen;
+      
+      if (chatFullscreen) {
+        step3.style.position = 'fixed';
+        step3.style.top = '0';
+        step3.style.left = '0';
+        step3.style.right = '0';
+        step3.style.bottom = '0';
+        step3.style.zIndex = '9999';
+        step3.style.margin = '0';
+        step3.style.borderRadius = '0';
+        step3.style.overflow = 'auto';
+        document.getElementById('chatMessages').style.height = 'calc(100vh - 250px)';
+      } else {
+        step3.style.position = '';
+        step3.style.top = '';
+        step3.style.left = '';
+        step3.style.right = '';
+        step3.style.bottom = '';
+        step3.style.zIndex = '';
+        step3.style.margin = '';
+        step3.style.borderRadius = '';
+        step3.style.overflow = '';
+        document.getElementById('chatMessages').style.height = chatExpanded ? '32rem' : '16rem';
+      }
+    }
+
+    function getMethodColor(method) {
+      const colors = { GET: 'text-blue-400', POST: 'text-green-400', PUT: 'text-yellow-400', DELETE: 'text-red-400' };
+      return colors[method?.toUpperCase()] || 'text-gray-400';
+    }
+
+    function saveApiKey() {
+      const apiKey = document.getElementById('apiKeyInput').value.trim();
+      if (!apiKey) {
+        alert('Please enter an API key');
+        return;
+      }
+      
+      const serverName = window.generatedServerName;
+      if (serverName) {
+        // Store API key in localStorage with server name as key
+        localStorage.setItem(`mcp_apikey_${serverName}`, apiKey);
+        document.getElementById('apiKeySaved').classList.remove('hidden');
+        log(`API key saved for ${serverName}`, 'success');
+        
+        // Hide the saved message after 3 seconds
+        setTimeout(() => {
+          document.getElementById('apiKeySaved').classList.add('hidden');
+        }, 3000);
+      }
+    }
+
+    function openTestPage() {
+      const serverName = window.generatedServerName;
+      if (serverName) {
+        // Get API key from localStorage
+        const apiKey = localStorage.getItem(`mcp_apikey_${serverName}`) || '';
+        
+        // Open the standalone test hub (hosted on same server)
+        const url = new URL('/test.html', window.location.origin);
+        url.searchParams.set('server', serverName);
+        if (apiKey) {
+          url.searchParams.set('apiKey', apiKey);
+        }
+        window.open(url.toString(), '_blank');
+      } else {
+        // If no server name, just open the test hub
+        window.open('/test.html', '_blank');
+      }
+    }
+  </script>
+</body>
+</html>

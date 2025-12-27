@@ -3,8 +3,6 @@
 /* eslint-disable */
 import type * as openzeppelin from "./@openzeppelin";
 export type { openzeppelin };
-import type * as contracts from "./contracts";
-export type { contracts };
 import type * as src from "./src";
 export type { src };
 export * as factories from "./factories";
@@ -18,6 +16,10 @@ export type { IERC721Errors } from "./@openzeppelin/contracts/interfaces/draft-I
 export { IERC721Errors__factory } from "./factories/@openzeppelin/contracts/interfaces/draft-IERC6093.sol/IERC721Errors__factory";
 export type { IERC4906 } from "./@openzeppelin/contracts/interfaces/IERC4906";
 export { IERC4906__factory } from "./factories/@openzeppelin/contracts/interfaces/IERC4906__factory";
+export type { ERC20 } from "./@openzeppelin/contracts/token/ERC20/ERC20";
+export { ERC20__factory } from "./factories/@openzeppelin/contracts/token/ERC20/ERC20__factory";
+export type { IERC20Metadata } from "./@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata";
+export { IERC20Metadata__factory } from "./factories/@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata__factory";
 export type { IERC20 } from "./@openzeppelin/contracts/token/ERC20/IERC20";
 export { IERC20__factory } from "./factories/@openzeppelin/contracts/token/ERC20/IERC20__factory";
 export type { ERC721 } from "./@openzeppelin/contracts/token/ERC721/ERC721";
@@ -36,13 +38,13 @@ export type { IERC165 } from "./@openzeppelin/contracts/utils/introspection/IERC
 export { IERC165__factory } from "./factories/@openzeppelin/contracts/utils/introspection/IERC165__factory";
 export type { SafeCast } from "./@openzeppelin/contracts/utils/math/SafeCast";
 export { SafeCast__factory } from "./factories/@openzeppelin/contracts/utils/math/SafeCast__factory";
+export type { ReentrancyGuard } from "./@openzeppelin/contracts/utils/ReentrancyGuard";
+export { ReentrancyGuard__factory } from "./factories/@openzeppelin/contracts/utils/ReentrancyGuard__factory";
 export type { Strings } from "./@openzeppelin/contracts/utils/Strings";
 export { Strings__factory } from "./factories/@openzeppelin/contracts/utils/Strings__factory";
-export type { IdentityRegistry } from "./contracts/IdentityRegistry";
-export { IdentityRegistry__factory } from "./factories/contracts/IdentityRegistry__factory";
-export type { PaymentEscrow } from "./contracts/PaymentEscrow";
-export { PaymentEscrow__factory } from "./factories/contracts/PaymentEscrow__factory";
-export type { ReputationRegistry } from "./contracts/ReputationRegistry";
-export { ReputationRegistry__factory } from "./factories/contracts/ReputationRegistry__factory";
 export type { AgentRegistry } from "./src/AgentRegistry";
 export { AgentRegistry__factory } from "./factories/src/AgentRegistry__factory";
+export type { MCPPaymentProcessor } from "./src/MCPPaymentProcessor";
+export { MCPPaymentProcessor__factory } from "./factories/src/MCPPaymentProcessor__factory";
+export type { MockUSDC } from "./src/MockUSDC";
+export { MockUSDC__factory } from "./factories/src/MockUSDC__factory";

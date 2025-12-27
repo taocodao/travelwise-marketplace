@@ -1,0 +1,77 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Google Maps Geocoding API",
+    "description": "Geocoding is the process of converting addresses (like a street address) into geographic coordinates (like latitude and longitude), which you can use to place markers on a map, or position the map.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://maps.googleapis.com/maps/api/geocode"
+    }
+  ],
+  "paths": {
+    "/json": {
+      "get": {
+        "summary": "Geocode",
+        "description": "Geocoding is the process of converting addresses (like \"1600 Amphitheatre Parkway, Mountain View, CA\") into geographic coordinates (like latitude 37.423021 and longitude -122.083739).",
+        "operationId": "geocode",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "The street address that you want to geocode, in the format used by the national postal service of the country concerned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "description": "Your application's API key. This key identifies your application for purposes of quota management.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "formatted_address": { "type": "string" },
+                          "geometry": {
+                            "type": "object",
+                            "properties": {
+                              "location": {
+                                "type": "object",
+                                "properties": {
+                                  "lat": { "type": "number" },
+                                  "lng": { "type": "number" }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,252 @@
+# Lead Generation Agentic Workflow
+#
+# Automated B2B lead generation pipeline using Apollo MCP server.
+# Based on the DO (Directive-Orchestration-Execution) framework.
+#
+# Usage:
+#   POST /workflows/lead-generation/execute
+#   {
+#     "industry": "SaaS",
+#     "company_size": "10-100",
+#     "geography": "United States",
+#     "roles": ["VP Sales", "Head of Marketing"],
+#     "max_leads": 50
+#   }
+
+name: lead-generation
+description: Automated B2B lead generation with ICP analysis, enrichment, scoring, and personalized outreach
+version: "1.0.0"
+
+creator:
+  address: "0x0000000000000000000000000000000000000000"
+  name: "TravelWise Team"
+  revenueShare: 70
+
+pricing:
+  basePrice: 1.20
+  currency: USDC
+  dynamicPricing: true
+  perLeadCost: 0.02
+
+inputs:
+  - name: industry
+    type: string
+    description: Target industry (e.g., SaaS, Finance, Healthcare)
+    required: true
+  - name: company_size
+    type: string
+    description: Employee range (e.g., "10-100", "100-500", "500+")
+    required: true
+  - name: geography
+    type: string
+    description: Target countries/regions
+    required: true
+  - name: roles
+    type: array
+    description: Decision-maker titles to target
+    required: false
+    default: ["CEO", "VP Sales", "Head of Marketing", "CTO"]
+  - name: max_leads
+    type: number
+    description: Maximum number of leads to find
+    required: false
+    default: 50
+  - name: keywords
+    type: string
+    description: Additional keywords (hiring, funding, growth, etc.)
+    required: false
+    default: ""
+
+steps:
+  # ===== STEP 1: ICP ANALYSIS =====
+  - id: icp_analysis
+    name: Analyze Ideal Customer Profile
+    type: mcp_tool
+    tool:
+      server: apollo
+      function: apollo_icp_mapping
+      params:
+        industry: "{{input.industry}}"
+        company_size: "{{input.company_size}}"
+        locations: "{{input.geography}}"
+        target_roles: "{{input.roles}}"
+        search_query: "Find {{input.roles}} in {{input.industry}} companies with {{input.company_size}} employees in {{input.geography}}"
+    estimatedCost: 0.03
+    description: Analyze target market and define ICP criteria
+    
+  # ===== STEP 2: LEAD SEARCH =====
+  - id: lead_search
+    name: Find Matching Companies
+    type: mcp_tool
+    dependsOn:
+      - icp_analysis
+    tool:
+      server: apollo
+      function: apollo_lead_search
+      params:
+        search_query: "{{input.industry}} companies {{input.company_size}} employees {{input.geography}} {{input.keywords}}"
+        num_results: "{{input.max_leads}}"
+    estimatedCost: 0.01
+    description: Search for companies matching ICP criteria
+    
+  # ===== STEP 3: ENRICH LEADS =====
+  - id: enrich_leads
+    name: Enrich with Contact Information
+    type: mcp_tool
+    dependsOn:
+      - lead_search
+    tool:
+      server: apollo
+      function: apollo_people_enrichment
+      params:
+        company_domains: "{{steps.lead_search.domains}}"
+        target_roles: "{{input.roles}}"
+    estimatedCost: 1.00
+    description: Find decision-maker emails and phone numbers
+    
+  # ===== STEP 4: SCORE LEADS =====
+  - id: score_leads
+    name: Score and Prioritize Leads
+    type: ai_decision
+    dependsOn:
+      - icp_analysis
+      - enrich_leads
+    ai:
+      prompt: |
+        Score these B2B leads for {{input.industry}} targeting.
+        
+        ICP CRITERIA:
+        {{steps.icp_analysis}}
+        
+        LEADS DATA:
+        {{steps.enrich_leads}}
+        
+        For each lead, calculate a FIT SCORE (0-100) based on:
+        - Firmographic Fit (40 pts): Company size, industry match, funding stage
+        - Behavioral Signals (35 pts): Hiring activity, growth indicators, tech stack
+        - Product Fit (25 pts): Problem alignment, competitor usage
+        
+        Assign tiers:
+        - HOT (75-100): Top priority, immediate outreach
+        - WARM (50-74): Good fit, standard sequence
+        - COLD (0-49): Nurture for later
+        
+        Output JSON array with: company, score, tier, reasoning
+      outputFormat: json
+    estimatedCost: 0.05
+    description: AI-powered lead scoring and prioritization
+    
+  # ===== STEP 5: GENERATE EMAILS =====
+  - id: generate_emails
+    name: Generate Personalized Outreach
+    type: ai_decision
+    dependsOn:
+      - score_leads
+    ai:
+      prompt: |
+        Generate personalized cold email sequences for HOT and WARM tier leads.
+        
+        SCORED LEADS:
+        {{steps.score_leads}}
+        
+        For each HOT/WARM lead, create a 3-email sequence:
+        
+        EMAIL 1 (Day 0 - Awareness):
+        - Length: 50-80 words
+        - Hook: Personalization based on company/role
+        - CTA: Soft (read article, reply with thought)
+        
+        EMAIL 2 (Day 3 - Credibility):
+        - Length: 80-120 words  
+        - Include: Case study or social proof
+        - CTA: 15-minute call
+        
+        EMAIL 3 (Day 7 - Urgency):
+        - Length: 60-100 words
+        - Include: Urgency element
+        - CTA: Specific meeting times
+        
+        Subject lines must be specific (not generic "quick question").
+        Reference company-specific details when possible.
+        
+        Output JSON with: lead_email, email_sequence (array of 3 emails)
+      outputFormat: json  
+    estimatedCost: 0.10
+    description: Generate personalized 3-email sequences
+    
+  # ===== STEP 6: FORMAT OUTPUT =====
+  - id: format_output
+    name: Format Results for Export
+    type: transform
+    dependsOn:
+      - enrich_leads
+      - score_leads
+      - generate_emails
+    transform:
+      type: merge
+      sources:
+        - steps.enrich_leads
+        - steps.score_leads
+        - steps.generate_emails
+      outputFormat: csv
+      columns:
+        - company_name
+        - domain
+        - decision_maker_name
+        - decision_maker_title
+        - decision_maker_email
+        - phone
+        - company_size
+        - industry
+        - fit_score
+        - tier
+        - email_1_subject
+        - email_1_body
+        - email_2_subject
+        - email_2_body
+        - email_3_subject
+        - email_3_body
+    estimatedCost: 0
+    description: Merge all data into exportable format
+
+output:
+  template: |
+    # Lead Generation Results
+    
+    **Campaign:** {{input.industry}} - {{input.geography}}
+    **Leads Found:** {{steps.lead_search.count}}
+    **Enriched:** {{steps.enrich_leads.count}}
+    
+    ## Summary by Tier
+    - 🔥 HOT: {{steps.score_leads.hot_count}} leads
+    - 🌡️ WARM: {{steps.score_leads.warm_count}} leads
+    - ❄️ COLD: {{steps.score_leads.cold_count}} leads
+    
+    ## Top 5 Leads
+    {{steps.score_leads.top_5}}
+    
+    ## Export
+    {{steps.format_output}}
+
+# Workflow metadata
+tags:
+  - lead-generation
+  - b2b-sales
+  - apollo
+  - outreach
+  - automation
+
+category: sales
+isPublic: true
+
+# Self-annealing configuration
+metrics:
+  targets:
+    enrichment_rate: 0.80    # 80% of leads should have email
+    hot_lead_ratio: 0.20     # 20% should be HOT tier
+    email_personalization: 0.90  # 90% emails should be personalized
+  alerts:
+    - condition: enrichment_rate < 0.60
+      action: retry_enrichment
+    - condition: hot_lead_ratio < 0.10
+      action: adjust_scoring

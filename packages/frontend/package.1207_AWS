@@ -1,0 +1,23 @@
+{
+  "name": "travelwise-marketplace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "cd packages/frontend && npm run build",
+    "start": "NODE_ENV=production npx tsx start-all-services.ts",
+    "dev": "npx tsx start-all-services.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsx": "^4.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -19,7 +19,6 @@ interface Transaction {
   timestamp: string;
   description: string;
   toolName: string;
-  serverName: string;
   amount: number;
   status: 'completed' | 'pending';
 }
@@ -63,7 +62,7 @@ export default function TravelAgentMCP(): JSX.Element {
   const [userBalance, setUserBalance] = useState<number>(50.00);
   const [totalSpent, setTotalSpent] = useState<number>(12.45);
   const [totalRequests, setTotalRequests] = useState<number>(618);
-  const [lastActivity] = useState<string>('12/05/2025');
+  const [lastActivity] = useState<string>('12/03/2025');
 
   // MCP Servers
   const [googleMapsMCP, setGoogleMapsMCP] = useState<MCPServer>({
@@ -110,9 +109,9 @@ export default function TravelAgentMCP(): JSX.Element {
     status: 'connected',
     endpoint: 'http://localhost:3005',
     tools: [
-      { id: 'plan_scenic_route', name: 'plan_scenic_route', description: 'SCENIC PLANNING: Complete trip planning with weather-aware route optimization and scenic stops (orchestrates Google Maps + Weather)', cost: 0.05, callCount: 0 },
-      { id: 'weather_aware_itinerary', name: 'weather_aware_itinerary', description: 'SMART ITINERARY: Day-by-day activity planning optimized for weather conditions (orchestrates Weather + Google Maps)', cost: 0.03, callCount: 0 },
-      { id: 'hotel_search', name: 'hotel_search', description: 'ACCOMMODATION: Search hotels with availability, pricing, and amenities (orchestrates Google Maps)', cost: 0.03, callCount: 0 }
+      { id: 'plan_scenic_route', name: 'plan_scenic_route', description: 'SCENIC PLANNING: Complete trip planning with weather-aware route optimization and scenic stops', cost: 0.05, callCount: 0 },
+      { id: 'weather_aware_itinerary', name: 'weather_aware_itinerary', description: 'SMART ITINERARY: Day-by-day activity planning optimized for weather conditions', cost: 0.03, callCount: 0 },
+      { id: 'hotel_search', name: 'hotel_search', description: 'ACCOMMODATION: Search hotels with availability, pricing, and amenities', cost: 0.03, callCount: 0 }
     ]
   });
 
@@ -150,13 +149,13 @@ export default function TravelAgentMCP(): JSX.Element {
 **Connected MCP Servers:** 
 - Google Maps MCP Server (Port 3003)
 - Weather MCP Server (Port 3004)
-- Travel Agent MCP Server (Port 3005) - **Orchestrates other MCPs**
+- Travel Agent MCP Server (Port 3005)
 
 **🎯 Real MCP Integration Features:**
 • Live API calls to MCP servers
 • Real-time weather data from OpenWeather API
 • Google Maps route optimization
-• **Multi-MCP orchestrated trip planning**
+• Multi-MCP orchestrated trip planning
 • X402 HTTP payment protocol
 • ERC-8004 agent discovery standard
 • USDC pay-per-use settlement
@@ -166,13 +165,6 @@ export default function TravelAgentMCP(): JSX.Element {
 • **ERC-8004 Standard:** On-chain agent and MCP server discovery
 • **USDC Settlement:** Real-time payment in USDC stablecoin
 • **Pay-per-Use:** Only pay for tools you actually use
-
-**🔗 Orchestration Model:**
-When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and Weather MCP servers. Each sub-call generates its own transaction:
-
-• **plan_scenic_route** → calls get_route (Maps) + get_forecast (Weather)
-• **weather_aware_itinerary** → calls get_forecast (Weather) + find_places (Maps)
-• **hotel_search** → calls find_places (Maps)
 
 **Available Functions & Live Pricing (USDC):**
 
@@ -185,10 +177,10 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
 • get_current_weather: $0.01 - Current conditions
 • get_forecast: $0.02 - 5-day forecast
 
-**Travel Agent MCP (Orchestrator):**
-• plan_scenic_route: $0.05 + sub-calls - Complete trip planning
-• weather_aware_itinerary: $0.03 + sub-calls - Smart itinerary
-• hotel_search: $0.03 + sub-calls - Hotel search
+**Travel Agent MCP:**
+• plan_scenic_route: $0.05 - Complete trip planning
+• weather_aware_itinerary: $0.03 - Smart itinerary
+• hotel_search: $0.03 - Hotel search
 
 🎯 Ask me questions and I'll orchestrate real MCP calls to answer!`,
       timestamp: new Date()
@@ -196,17 +188,16 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
     setMessages([welcomeMsg]);
   };
 
-  const addTransaction = (description: string, toolName: string, serverName: string, amount: number): void => {
+  const addTransaction = (description: string, toolName: string, amount: number): void => {
     const tx: Transaction = {
-      id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `tx-${Date.now()}-${Math.random()}`,
       timestamp: new Date().toLocaleTimeString(),
       description,
       toolName,
-      serverName,
       amount,
       status: 'completed'
     };
-    setTransactions(prev => [tx, ...prev].slice(0, 20));
+    setTransactions(prev => [tx, ...prev].slice(0, 5));
   };
 
   const callMCPTool = async (serverEndpoint: string, toolName: string, params: any): Promise<any> => {
@@ -232,66 +223,6 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
         tool: toolName
       };
     }
-  };
-
-  // Helper function to call Google Maps MCP and record transaction
-  const callGoogleMapsTool = async (toolName: string, params: any, description: string): Promise<any> => {
-    const tool = googleMapsMCP.tools.find(t => t.id === toolName);
-    const cost = tool?.cost || 0.032;
-    
-    const result = await callMCPTool(googleMapsMCP.endpoint, toolName, params);
-    
-    // Add transaction for this sub-call
-    addTransaction(description, toolName, 'Google Maps MCP', cost);
-    
-    // Update Google Maps MCP state
-    setGoogleMapsMCP(prev => ({
-      ...prev,
-      balance: prev.balance + cost,
-      tools: prev.tools.map(t => t.id === toolName ? { ...t, callCount: t.callCount + 1 } : t)
-    }));
-    
-    return { result, cost };
-  };
-
-  // Helper function to call Weather MCP and record transaction
-  const callWeatherTool = async (toolName: string, params: any, description: string): Promise<any> => {
-    const tool = weatherMCP.tools.find(t => t.id === toolName);
-    const cost = tool?.cost || 0.01;
-    
-    const result = await callMCPTool(weatherMCP.endpoint, toolName, params);
-    
-    // Add transaction for this sub-call
-    addTransaction(description, toolName, 'Weather MCP', cost);
-    
-    // Update Weather MCP state
-    setWeatherMCP(prev => ({
-      ...prev,
-      balance: prev.balance + cost,
-      tools: prev.tools.map(t => t.id === toolName ? { ...t, callCount: t.callCount + 1 } : t)
-    }));
-    
-    return { result, cost };
-  };
-
-  // Helper function to call Travel Agent MCP (orchestrator) and record transaction
-  const callTravelAgentTool = async (toolName: string, params: any, description: string): Promise<any> => {
-    const tool = travelAgentMCP.tools.find(t => t.id === toolName);
-    const cost = tool?.cost || 0.03;
-    
-    const result = await callMCPTool(travelAgentMCP.endpoint, toolName, params);
-    
-    // Add transaction for the orchestrator call
-    addTransaction(description, toolName, 'Travel Agent MCP', cost);
-    
-    // Update Travel Agent MCP state
-    setTravelAgentMCP(prev => ({
-      ...prev,
-      balance: prev.balance + cost,
-      tools: prev.tools.map(t => t.id === toolName ? { ...t, callCount: t.callCount + 1 } : t)
-    }));
-    
-    return { result, cost };
   };
 
   const formatMCPResponse = (result: any): string => {
@@ -429,76 +360,84 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
     let responseText = '';
 
     try {
+      // Analyze query and call appropriate MCP servers
       const lowerQuery = query.toLowerCase();
 
       if (lowerQuery.includes('hotel')) {
-        // Hotel search - orchestrates find_places from Google Maps
+        // Call hotel search
         const match = query.match(/in\s+([^,]+)/i) || query.match(/near\s+([^,]+)/i);
         const location = match ? match[1].trim() : 'New York';
         
-        // Step 1: Call Travel Agent MCP (orchestrator)
-        const travelAgentResult = await callTravelAgentTool('hotel_search', {
+        const result = await callMCPTool(travelAgentMCP.endpoint, 'hotel_search', {
           location,
           checkIn: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           checkOut: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        }, `Hotel search orchestration in ${location} (X402)`);
-        
-        totalCost += travelAgentResult.cost;
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.03;
         functionsUsed.push('hotel_search');
-
-        // Step 2: Call Google Maps find_places as sub-call
-        const mapsResult = await callGoogleMapsTool('find_places', {
-          location,
-          type: 'lodging',
-          radius: 5000
-        }, `→ Sub-call: Find hotels in ${location} (X402)`);
         
-        totalCost += mapsResult.cost;
-        functionsUsed.push('find_places');
-
-        mcpResults.push(travelAgentResult.result);
-        responseText += formatMCPResponse(travelAgentResult.result);
-        responseText += `\n\n**🔗 Orchestration:** Travel Agent called Google Maps find_places\n`;
+        addTransaction(`Hotel search in ${location} (X402)`, 'hotel_search', 0.03);
+        setTravelAgentMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.03,
+          tools: prev.tools.map(t => t.id === 'hotel_search' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
 
       } else if (lowerQuery.includes('weather forecast') || lowerQuery.includes('7-day') || lowerQuery.includes('forecast')) {
-        // Direct weather forecast call
+        // Call weather forecast
         const match = query.match(/for\s+([^,\.]+)/i) || query.match(/in\s+([^,\.]+)/i);
         const location = match ? match[1].trim() : 'Miami';
         
-        const weatherResult = await callWeatherTool('get_forecast', {
+        const result = await callMCPTool(weatherMCP.endpoint, 'get_forecast', {
           location,
           days: 7,
           units: 'imperial'
-        }, `Weather forecast for ${location} (X402)`);
+        });
 
-        mcpResults.push(weatherResult.result);
-        responseText += formatMCPResponse(weatherResult.result);
-        totalCost += weatherResult.cost;
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.02;
         functionsUsed.push('get_forecast');
+        
+        addTransaction(`Weather forecast for ${location} (X402)`, 'get_forecast', 0.02);
+        setWeatherMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.02,
+          tools: prev.tools.map(t => t.id === 'get_forecast' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
 
       } else if (lowerQuery.includes('current weather') || lowerQuery.includes('weather in')) {
-        // Direct current weather call
+        // Call current weather
         const match = query.match(/in\s+([^,\.]+)/i) || query.match(/for\s+([^,\.]+)/i);
         const location = match ? match[1].trim() : 'Seattle';
         
-        const weatherResult = await callWeatherTool('get_current_weather', {
+        const result = await callMCPTool(weatherMCP.endpoint, 'get_current_weather', {
           location,
           units: 'imperial'
-        }, `Current weather for ${location} (X402)`);
+        });
 
-        mcpResults.push(weatherResult.result);
-        responseText += formatMCPResponse(weatherResult.result);
-        totalCost += weatherResult.cost;
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.01;
         functionsUsed.push('get_current_weather');
+        
+        addTransaction(`Current weather for ${location} (X402)`, 'get_current_weather', 0.01);
+        setWeatherMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.01,
+          tools: prev.tools.map(t => t.id === 'get_current_weather' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
 
       } else if (lowerQuery.includes('plan') && (lowerQuery.includes('route') || lowerQuery.includes('trip'))) {
-        // Scenic route planning - orchestrates get_route + get_forecast
+        // Call scenic route planner
         const parts = query.match(/from\s+([^to]+)\s+to\s+([^with]+)/i);
         const origin = parts ? parts[1].trim() : 'San Francisco';
         const destination = parts ? parts[2].trim() : 'Los Angeles';
         
-        // Step 1: Call Travel Agent MCP (orchestrator)
-        const travelAgentResult = await callTravelAgentTool('plan_scenic_route', {
+        const result = await callMCPTool(travelAgentMCP.endpoint, 'plan_scenic_route', {
           origin,
           destination,
           days: 3,
@@ -507,50 +446,22 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
             prefer_scenic: true,
             max_driving_hours_per_day: 6
           }
-        }, `Scenic route planning: ${origin} → ${destination} (X402)`);
-        
-        totalCost += travelAgentResult.cost;
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.total_charge || 0.05;
         functionsUsed.push('plan_scenic_route');
-
-        // Step 2: Call Google Maps get_route as sub-call
-        const routeResult = await callGoogleMapsTool('get_route', {
-          origin,
-          destination,
-          mode: 'driving'
-        }, `→ Sub-call: Route calculation ${origin} → ${destination} (X402)`);
         
-        totalCost += routeResult.cost;
-        functionsUsed.push('get_route');
-
-        // Step 3: Call Weather get_forecast as sub-call
-        const weatherResult = await callWeatherTool('get_forecast', {
-          location: destination,
-          days: 5,
-          units: 'imperial'
-        }, `→ Sub-call: Weather forecast for ${destination} (X402)`);
-        
-        totalCost += weatherResult.cost;
-        functionsUsed.push('get_forecast');
-
-        // Step 4: Call Google Maps find_places for scenic stops
-        const placesResult = await callGoogleMapsTool('find_places', {
-          location: `${origin} to ${destination}`,
-          type: 'tourist_attraction',
-          radius: 10000
-        }, `→ Sub-call: Find scenic stops along route (X402)`);
-        
-        totalCost += placesResult.cost;
-        functionsUsed.push('find_places');
-
-        mcpResults.push(travelAgentResult.result);
-        responseText += formatMCPResponse(travelAgentResult.result);
-        responseText += `\n\n**🔗 Orchestration:** Travel Agent called:\n`;
-        responseText += `• Google Maps get_route ($${routeResult.cost.toFixed(3)})\n`;
-        responseText += `• Weather get_forecast ($${weatherResult.cost.toFixed(3)})\n`;
-        responseText += `• Google Maps find_places ($${placesResult.cost.toFixed(3)})\n`;
+        addTransaction(`Scenic route: ${origin} to ${destination} (X402)`, 'plan_scenic_route', 0.05);
+        setTravelAgentMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.05,
+          tools: prev.tools.map(t => t.id === 'plan_scenic_route' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
 
       } else if (lowerQuery.includes('find') || lowerQuery.includes('search') || lowerQuery.includes('attractions')) {
-        // Direct find places call
+        // Call find places
         const match = query.match(/in\s+([^,\.]+)/i) || query.match(/near\s+([^,\.]+)/i);
         const location = match ? match[1].trim() : 'Central Park, New York';
         
@@ -558,58 +469,47 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                      lowerQuery.includes('restaurant') ? 'restaurant' : 
                      'tourist_attraction';
         
-        const mapsResult = await callGoogleMapsTool('find_places', {
+        const result = await callMCPTool(googleMapsMCP.endpoint, 'find_places', {
           location,
           type,
           radius: 5000
-        }, `Find places in ${location} (X402)`);
+        });
 
-        mcpResults.push(mapsResult.result);
-        responseText += formatMCPResponse(mapsResult.result);
-        totalCost += mapsResult.cost;
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.032;
         functionsUsed.push('find_places');
+        
+        addTransaction(`Find places in ${location} (X402)`, 'find_places', 0.032);
+        setGoogleMapsMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.032,
+          tools: prev.tools.map(t => t.id === 'find_places' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
 
       } else if (lowerQuery.includes('itinerary')) {
-        // Weather-aware itinerary - orchestrates get_forecast + find_places
+        // Call weather-aware itinerary
         const match = query.match(/for\s+([^,\(]+)/i);
         const location = match ? match[1].trim() : 'San Diego';
         const daysMatch = query.match(/(\d+)\s*day/i);
         const days = daysMatch ? parseInt(daysMatch[1]) : 3;
         
-        // Step 1: Call Travel Agent MCP (orchestrator)
-        const travelAgentResult = await callTravelAgentTool('weather_aware_itinerary', {
+        const result = await callMCPTool(travelAgentMCP.endpoint, 'weather_aware_itinerary', {
           location,
           days
-        }, `Weather-aware itinerary for ${location} (X402)`);
-        
-        totalCost += travelAgentResult.cost;
+        });
+
+        mcpResults.push(result);
+        responseText += formatMCPResponse(result);
+        totalCost += result.pricing?.base_cost || 0.03;
         functionsUsed.push('weather_aware_itinerary');
-
-        // Step 2: Call Weather get_forecast as sub-call
-        const weatherResult = await callWeatherTool('get_forecast', {
-          location,
-          days,
-          units: 'imperial'
-        }, `→ Sub-call: ${days}-day forecast for ${location} (X402)`);
         
-        totalCost += weatherResult.cost;
-        functionsUsed.push('get_forecast');
-
-        // Step 3: Call Google Maps find_places as sub-call
-        const placesResult = await callGoogleMapsTool('find_places', {
-          location,
-          type: 'tourist_attraction',
-          radius: 10000
-        }, `→ Sub-call: Find attractions in ${location} (X402)`);
-        
-        totalCost += placesResult.cost;
-        functionsUsed.push('find_places');
-
-        mcpResults.push(travelAgentResult.result);
-        responseText += formatMCPResponse(travelAgentResult.result);
-        responseText += `\n\n**🔗 Orchestration:** Travel Agent called:\n`;
-        responseText += `• Weather get_forecast ($${weatherResult.cost.toFixed(3)})\n`;
-        responseText += `• Google Maps find_places ($${placesResult.cost.toFixed(3)})\n`;
+        addTransaction(`Itinerary for ${location} (X402)`, 'weather_aware_itinerary', 0.03);
+        setTravelAgentMCP(prev => ({
+          ...prev,
+          balance: prev.balance + 0.03,
+          tools: prev.tools.map(t => t.id === 'weather_aware_itinerary' ? { ...t, callCount: t.callCount + 1 } : t)
+        }));
 
       } else {
         responseText = '❓ I can help you with:\n\n' +
@@ -632,7 +532,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
     const assistantMsg: Message = {
       id: `msg-${Date.now()}-assistant`,
       role: 'assistant',
-      content: responseText + `\n\n---\n\n💰 **Total cost:** $${totalCost.toFixed(3)} USDC (X402)\n⏱️ **Execution time:** ${(executionTime / 1000).toFixed(1)}s\n🔗 **Protocol:** ERC-8004 + X402 payment\n🛠️ **Functions used:** ${functionsUsed.join(', ') || 'None'}`,
+      content: responseText + `\n\n---\n\n💰 **Total cost:** $${totalCost.toFixed(2)} USDC (X402)\n⏱️ **Execution time:** ${(executionTime / 1000).toFixed(1)}s\n🔗 **Protocol:** ERC-8004 + X402 payment\n🛠️ **Functions used:** ${functionsUsed.join(', ') || 'None'}`,
       timestamp: new Date(),
       cost: totalCost,
       executionTime,
@@ -698,14 +598,6 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
     }
   };
 
-  // Helper to get server color
-  const getServerColor = (serverName: string): string => {
-    if (serverName.includes('Google Maps')) return '#2563eb';
-    if (serverName.includes('Weather')) return '#ea580c';
-    if (serverName.includes('Travel Agent')) return '#7c3aed';
-    return '#6b7280';
-  };
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
       {/* Header */}
@@ -714,7 +606,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
           <span style={{ fontSize: '48px' }}>🧪</span>
           <div>
             <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: 0 }}>Travel Agent MCP Test Environment</h1>
-            <p style={{ color: '#aaa', margin: '4px 0 0 0' }}>X402 Payment Protocol + ERC-8004 Agent Discovery • Multi-MCP Orchestration</p>
+            <p style={{ color: '#aaa', margin: '4px 0 0 0' }}>X402 Payment Protocol + ERC-8004 Agent Discovery • Real MCP Integration</p>
           </div>
         </div>
       </header>
@@ -755,7 +647,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
 
               <div style={{ background: 'linear-gradient(to right, #dbeafe, #bfdbfe)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
                 <p style={{ fontSize: '14px', color: '#374151', fontWeight: '600', margin: '0 0 8px 0' }}>Server Earnings (USDC)</p>
-                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>${googleMapsMCP.balance.toFixed(3)} USDC</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>${googleMapsMCP.balance.toFixed(2)} USDC</p>
               </div>
 
               <div>
@@ -823,7 +715,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
 
               <div style={{ background: 'linear-gradient(to right, #fed7aa, #fdba74)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
                 <p style={{ fontSize: '14px', color: '#374151', fontWeight: '600', margin: '0 0 8px 0' }}>Server Earnings (USDC)</p>
-                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#ea580c', margin: 0 }}>${weatherMCP.balance.toFixed(3)} USDC</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#ea580c', margin: 0 }}>${weatherMCP.balance.toFixed(2)} USDC</p>
               </div>
 
               <div>
@@ -836,7 +728,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                           <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tool.description}</p>
                         </div>
                         <span style={{ marginLeft: '16px', padding: '4px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap' }}>
-                          ${tool.cost.toFixed(3)} USDC
+                          ${tool.cost.toFixed(2)} USDC
                         </span>
                       </div>
                       {tool.callCount > 0 && (
@@ -856,9 +748,6 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ fontSize: '36px' }}>🎯</span>
                   <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>{travelAgentMCP.name}</h2>
-                  <span style={{ padding: '2px 8px', backgroundColor: '#7c3aed', color: '#fff', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
-                    ORCHESTRATOR
-                  </span>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <span style={{ padding: '4px 16px', backgroundColor: travelAgentMCP.status === 'connected' ? '#10b981' : '#ef4444', color: '#fff', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
@@ -869,7 +758,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
 
               <div style={{ background: 'linear-gradient(to right, #ddd6fe, #c4b5fd)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
                 <p style={{ fontSize: '14px', color: '#374151', fontWeight: '600', margin: '0 0 8px 0' }}>Server Earnings (USDC)</p>
-                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#7c3aed', margin: 0 }}>${travelAgentMCP.balance.toFixed(3)} USDC</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#7c3aed', margin: 0 }}>${travelAgentMCP.balance.toFixed(2)} USDC</p>
               </div>
 
               <div>
@@ -882,11 +771,11 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                           <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tool.description}</p>
                         </div>
                         <span style={{ marginLeft: '16px', padding: '4px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap' }}>
-                          ${tool.cost.toFixed(3)} USDC
+                          ${tool.cost.toFixed(2)} USDC
                         </span>
                       </div>
                       {tool.callCount > 0 && (
-                        <p style={{ fontSize: '12px', color: '#7c3aed', fontWeight: '600', margin: '8px 0 0 0' }}>
+                        <p style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', margin: '8px 0 0 0' }}>
                           ✓ Called {tool.callCount} time{tool.callCount > 1 ? 's' : ''} via X402
                         </p>
                       )}
@@ -896,7 +785,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
               </div>
             </div>
 
-            {/* USDC Balance Card */}
+            {/* USDC Balance */}
             <div style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 50%, #06b6d4 100%)', borderRadius: '16px', padding: '32px', color: '#fff' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -935,7 +824,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
             <div style={{ backgroundColor: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px', padding: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '24px' }}>📊</span>
-                <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>X402 Transaction History</h2>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>Recent Transactions</h2>
               </div>
 
               {transactions.length === 0 ? (
@@ -943,23 +832,19 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                   No transactions yet. Start testing to see X402 payment flow.
                 </p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {transactions.map((tx) => (
-                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: tx.description.startsWith('→') ? '#f3f4f6' : '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', borderLeft: `4px solid ${getServerColor(tx.serverName)}` }}>
+                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                        <span style={{ fontSize: '16px' }}>
-                          {tx.description.startsWith('→') ? '↳' : '✅'}
-                        </span>
-                        <div>
-                          <p style={{ fontWeight: '600', fontSize: '13px', margin: '0 0 2px 0', color: '#1f2937' }}>{tx.description}</p>
-                          <p style={{ fontSize: '11px', color: '#6b7280', margin: 0 }}>
-                            <span style={{ color: getServerColor(tx.serverName), fontWeight: '600' }}>{tx.serverName}</span> • {tx.toolName}
-                          </p>
+                        <span style={{ fontSize: '20px' }}>✅</span>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontWeight: '600', fontSize: '14px', margin: '0 0 4px 0', color: '#1f2937' }}>{tx.description}</p>
+                          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>({tx.toolName})</p>
                         </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#dc2626', margin: '0 0 2px 0' }}>-${tx.amount.toFixed(3)} USDC</p>
-                        <p style={{ fontSize: '11px', color: '#6b7280', margin: 0 }}>{tx.timestamp}</p>
+                      <div style={{ textAlign: 'right', marginLeft: '16px' }}>
+                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#dc2626', margin: '0 0 4px 0' }}>-${tx.amount.toFixed(2)} USDC</p>
+                        <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{tx.timestamp}</p>
                       </div>
                     </div>
                   ))}
@@ -1020,7 +905,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '256px', overflowY: 'auto' }}>
                   {testResults.map((result) => (
                     <div key={result.id} style={{ padding: '12px', backgroundColor: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '8px', fontSize: '12px', color: '#065f46' }}>
-                      ✓ {result.query.substring(0, 40)}... - ${result.cost.toFixed(3)} USDC
+                      ✓ {result.query.substring(0, 40)}... - ${result.cost.toFixed(2)} USDC
                     </div>
                   ))}
                 </div>
@@ -1029,7 +914,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
           </div>
         </div>
 
-        {/* Chat Interface */}
+        {/* Chat Interface - Full Width Bottom */}
         <div style={{ backgroundColor: '#000', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
           <div style={{ backgroundColor: '#1f2937', padding: '16px 24px', borderBottom: '1px solid #374151' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1056,7 +941,7 @@ When Travel Agent MCP is called, it orchestrates sub-calls to Google Maps and We
                       <span style={{ fontSize: '12px', color: '#6b7280' }}>{msg.timestamp.toLocaleTimeString()}</span>
                       {msg.cost !== undefined && msg.cost > 0 && (
                         <span style={{ marginLeft: 'auto', fontSize: '12px', fontWeight: 'bold', color: '#dc2626' }}>
-                          -${msg.cost.toFixed(3)} USDC
+                          -${msg.cost.toFixed(2)} USDC
                         </span>
                       )}
                     </div>

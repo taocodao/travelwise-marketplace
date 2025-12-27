@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧪 MCP Server Test Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; }
+    .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .chat-box { max-height: 500px; overflow-y: auto; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    .prompt-btn { transition: all 0.2s; }
+    .prompt-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
+  </style>
+</head>
+<body class="text-white">
+  <!-- Header -->
+  <header class="bg-black p-6 border-b-2 border-gray-800">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <div class="flex items-center gap-4">
+        <span class="text-4xl">🧪</span>
+        <div>
+          <h1 class="text-3xl font-bold">MCP Server Test Hub</h1>
+          <p class="text-gray-400">Test your MCP servers with natural language prompts</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="/" class="text-gray-400 hover:text-white text-sm">← Back to Generator</a>
+        <button onclick="loadServers()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">
+          🔄 Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-7xl mx-auto p-6">
+    <!-- Server Selection & API Key -->
+    <section class="glass rounded-xl p-6 mb-6">
+      <div class="flex items-center gap-4 flex-wrap">
+        <label class="text-lg font-semibold whitespace-nowrap">Select MCP Server:</label>
+        <select id="serverSelect" onchange="loadServerTools()" 
+          class="flex-1 min-w-64 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">-- Choose a server --</option>
+        </select>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-400">🔑 API Key:</label>
+          <input type="password" id="apiKeyInput" placeholder="Enter API key..."
+            class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 w-48 focus:outline-none focus:ring-2 focus:ring-purple-500">
+        </div>
+      </div>
+      <p id="serverInfo" class="text-gray-400 mt-3 text-sm"></p>
+    </section>
+
+    <!-- Main Content -->
+    <div id="mainContent" style="display: none;">
+      <!-- Example Prompts -->
+      <section class="glass rounded-xl p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span>💡</span> Try These Test Prompts
+        </h2>
+        <div id="examplePrompts" class="flex flex-wrap gap-3">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <div class="grid grid-cols-2 gap-6">
+        <!-- Left: Chat Interface -->
+        <section class="glass rounded-xl p-6 flex flex-col">
+          <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+            <span>💬</span> Test via Prompt
+          </h2>
+          
+          <!-- Chat Messages -->
+          <div id="chatBox" class="chat-box flex-1 bg-gray-900/50 rounded-lg p-4 mb-4 space-y-4">
+            <div class="text-gray-400 text-center py-8">
+              Select a server and type a prompt to test it
+            </div>
+          </div>
+          
+          <!-- Input -->
+          <div class="flex gap-2">
+            <input type="text" id="promptInput" placeholder="Type your test prompt... (e.g., 'Find coffee shops near Times Square')"
+              class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onkeypress="if(event.key==='Enter')sendPrompt()">
+            <button onclick="sendPrompt()" id="sendBtn"
+              class="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-lg font-medium whitespace-nowrap">
+              Send →
+            </button>
+          </div>
+        </section>
+
+        <!-- Right: Available Tools Reference -->
+        <section class="glass rounded-xl p-6">
+          <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+            <span>🔧</span> Available Tools
+          </h2>
+          <div id="toolsList" class="space-y-3 max-h-[500px] overflow-y-auto">
+            <p class="text-gray-400">Select a server to see available tools</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Activity Log -->
+    <section class="glass rounded-xl p-6 mt-6">
+      <h2 class="text-lg font-semibold mb-3">📋 Activity Log</h2>
+      <div id="log" class="bg-gray-900/50 rounded-lg p-4 font-mono text-sm h-32 overflow-y-auto text-gray-400">
+        <div>Ready. Select an MCP server to begin testing.</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3001';
+    let currentServer = null;
+    let currentTools = [];
+
+    // Pre-defined example prompts for different server types
+    const SERVER_PROMPTS = {
+      'google-places-api-tools': [
+        { text: 'Find coffee shops near Times Square', tool: 'search_places_nearby', params: { location: '40.758,-73.985', radius: 1000, type: 'cafe' }},
+        { text: 'Search for hotels in San Francisco', tool: 'search_places_nearby', params: { location: '37.774,-122.419', radius: 2000, type: 'lodging' }},
+        { text: 'Get autocomplete for "pizza new york"', tool: 'autocomplete_search', params: { input: 'pizza new york' }},
+        { text: 'Find restaurants near Central Park', tool: 'search_places_nearby', params: { location: '40.785,-73.968', radius: 500, type: 'restaurant' }},
+      ],
+      'google-maps-platform-api': [
+        { text: 'Get directions from NYC to Boston', tool: 'get_directions', params: { origin: 'New York, NY', destination: 'Boston, MA' }},
+        { text: 'Geocode "1600 Pennsylvania Ave, Washington DC"', tool: 'geocode_address', params: { address: '1600 Pennsylvania Ave, Washington DC' }},
+        { text: 'Calculate distance from LA to Las Vegas', tool: 'calculate_distance', params: { origin: 'Los Angeles, CA', destination: 'Las Vegas, NV' }},
+      ],
+      'swagger-petstore-tools': [
+        { text: 'List all available pets', tool: 'list_pets', params: { status: 'available' }},
+        { text: 'Find pet by ID 1', tool: 'get_pet', params: { petId: 1 }},
+        { text: 'Get store inventory', tool: 'get_inventory', params: {}},
+      ],
+      'default': [
+        { text: 'Test the first available tool', tool: null, params: {}},
+        { text: 'List all tools in this server', tool: null, params: {}},
+      ]
+    };
+
+    function log(msg, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const color = type === 'success' ? 'text-green-400' : type === 'error' ? 'text-red-400' : 'text-blue-400';
+      logDiv.innerHTML += `<div class="${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function addChatMessage(role, content, isHtml = false) {
+      const chatBox = document.getElementById('chatBox');
+      
+      // Remove placeholder if present
+      const placeholder = chatBox.querySelector('.text-center');
+      if (placeholder) placeholder.remove();
+      
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `p-3 rounded-lg ${role === 'user' ? 'bg-indigo-600/30 ml-auto max-w-[80%]' : 'bg-gray-800 max-w-[90%]'}`;
+      
+      if (isHtml) {
+        msgDiv.innerHTML = content;
+      } else {
+        msgDiv.innerHTML = marked.parse(content);
+      }
+      
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function loadServers() {
+      log('Loading available MCP servers...', 'info');
+      const select = document.getElementById('serverSelect');
+      
+      try {
+        const res = await fetch(`${API_BASE}/mcp`);
+        if (!res.ok) throw new Error('Failed to fetch servers');
+        
+        const data = await res.json();
+        select.innerHTML = '<option value="">-- Choose a server --</option>';
+        
+        if (data.servers && data.servers.length > 0) {
+          data.servers.forEach(server => {
+            const opt = document.createElement('option');
+            opt.value = server.name || server;
+            opt.textContent = server.name || server;
+            select.appendChild(opt);
+          });
+          log(`Found ${data.servers.length} MCP servers`, 'success');
+        }
+      } catch (err) {
+        log(`Error: ${err.message}. Make sure API server is running on port 3001`, 'error');
+      }
+    }
+
+    async function loadServerTools() {
+      const serverName = document.getElementById('serverSelect').value;
+      if (!serverName) {
+        document.getElementById('mainContent').style.display = 'none';
+        return;
+      }
+      
+      currentServer = serverName;
+      log(`Loading tools for ${serverName}...`, 'info');
+      
+      try {
+        const res = await fetch(`${API_BASE}/mcp/${serverName}/tools`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        
+        const tools = await res.json();
+        currentTools = tools;
+        
+        document.getElementById('serverInfo').textContent = 
+          `Server: ${serverName} | ${tools.length} tools | Endpoint: ${API_BASE}/mcp/${serverName}`;
+        
+        renderTools(tools);
+        renderExamplePrompts(serverName);
+        document.getElementById('mainContent').style.display = 'block';
+        
+        // Welcome message
+        document.getElementById('chatBox').innerHTML = '';
+        addChatMessage('assistant', `**🎯 ${serverName}** is ready for testing!\n\nYou have **${tools.length} tools** available. Try one of the example prompts above, or describe what you want to test.`);
+        
+        log(`Loaded ${tools.length} tools`, 'success');
+      } catch (err) {
+        log(`Failed to load tools: ${err.message}`, 'error');
+      }
+    }
+
+    function renderExamplePrompts(serverName) {
+      const container = document.getElementById('examplePrompts');
+      const prompts = SERVER_PROMPTS[serverName] || SERVER_PROMPTS['default'];
+      
+      container.innerHTML = prompts.map((p, i) => `
+        <button onclick="usePrompt(${i})" 
+          class="prompt-btn bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 rounded-lg text-sm font-medium">
+          ${p.text}
+        </button>
+      `).join('');
+    }
+
+    function usePrompt(index) {
+      const prompts = SERVER_PROMPTS[currentServer] || SERVER_PROMPTS['default'];
+      const prompt = prompts[index];
+      
+      if (prompt.tool && prompt.params) {
+        // Direct tool execution
+        addChatMessage('user', prompt.text);
+        executeTool(prompt.tool, prompt.params, prompt.text);
+      } else {
+        document.getElementById('promptInput').value = prompt.text;
+        sendPrompt();
+      }
+    }
+
+    function renderTools(tools) {
+      const container = document.getElementById('toolsList');
+      
+      if (!tools || tools.length === 0) {
+        container.innerHTML = '<p class="text-gray-400">No tools found</p>';
+        return;
+      }
+      
+      container.innerHTML = tools.map(tool => {
+        const toolName = tool.toolName || tool.name;
+        const description = tool.toolDescription || tool.summary || '';
+        const method = tool.method || 'POST';
+        const methodColor = method === 'GET' ? 'bg-blue-600' : 'bg-green-600';
+        
+        return `
+          <div class="bg-gray-900/50 rounded-lg p-3">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-bold text-indigo-400 text-sm">${toolName}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded ${methodColor} font-bold">${method}</span>
+            </div>
+            ${description ? `<p class="text-gray-400 text-xs">${description}</p>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function sendPrompt() {
+      const input = document.getElementById('promptInput');
+      const prompt = input.value.trim();
+      if (!prompt || !currentServer) return;
+      
+      input.value = '';
+      addChatMessage('user', prompt);
+      
+      // Parse the prompt to find matching tool
+      const matchedTool = findMatchingTool(prompt);
+      
+      if (matchedTool) {
+        // Try to extract params from prompt
+        const params = extractParamsFromPrompt(prompt, matchedTool);
+        executeTool(matchedTool.toolName || matchedTool.name, params, prompt);
+      } else {
+        addChatMessage('assistant', `I couldn't determine which tool to use for that request.\n\n**Available tools:**\n${currentTools.map(t => `- \`${t.toolName || t.name}\`: ${t.toolDescription || t.summary || ''}`).join('\n')}\n\nTry one of the example prompts above, or be more specific about what you want to do.`);
+      }
+    }
+
+    function findMatchingTool(prompt) {
+      const lower = prompt.toLowerCase();
+      
+      // Keyword mapping
+      const keywords = {
+        'search': ['search', 'find', 'look for', 'locate'],
+        'nearby': ['nearby', 'near', 'around', 'close to'],
+        'autocomplete': ['autocomplete', 'suggest', 'complete'],
+        'details': ['details', 'info', 'information', 'about'],
+        'directions': ['directions', 'route', 'how to get', 'navigate'],
+        'distance': ['distance', 'how far', 'miles', 'kilometers'],
+        'geocode': ['geocode', 'address', 'location of', 'coordinates'],
+        'list': ['list', 'show all', 'get all', 'available'],
+        'get': ['get', 'fetch', 'retrieve'],
+      };
+      
+      for (const tool of currentTools) {
+        const toolName = (tool.toolName || tool.name).toLowerCase();
+        const toolDesc = (tool.toolDescription || tool.summary || '').toLowerCase();
+        
+        // Direct name match
+        if (lower.includes(toolName)) return tool;
+        
+        // Keyword match
+        for (const [key, words] of Object.entries(keywords)) {
+          if (toolName.includes(key) || toolDesc.includes(key)) {
+            if (words.some(w => lower.includes(w))) return tool;
+          }
+        }
+      }
+      
+      // Default to first tool if user says "test"
+      if (lower.includes('test') && currentTools.length > 0) {
+        return currentTools[0];
+      }
+      
+      return null;
+    }
+
+    function extractParamsFromPrompt(prompt, tool) {
+      const params = {};
+      
+      // Extract location patterns
+      const nearMatch = prompt.match(/near\s+([^,]+)/i);
+      if (nearMatch) {
+        params.location = nearMatch[1].trim();
+      }
+      
+      // Extract quoted strings
+      const quoted = prompt.match(/"([^"]+)"/);
+      if (quoted) {
+        params.input = quoted[1];
+        params.query = quoted[1];
+      }
+      
+      // Extract "from X to Y" pattern
+      const routeMatch = prompt.match(/from\s+([^to]+)\s+to\s+(.+)/i);
+      if (routeMatch) {
+        params.origin = routeMatch[1].trim();
+        params.destination = routeMatch[2].trim();
+      }
+      
+      return params;
+    }
+
+    async function executeTool(toolName, params, userPrompt) {
+      const btn = document.getElementById('sendBtn');
+      btn.disabled = true;
+      btn.textContent = '...';
+      
+      addChatMessage('assistant', `🔄 Executing **${toolName}**...\n\n\`\`\`json\n${JSON.stringify(params, null, 2)}\n\`\`\``);
+      log(`Executing ${toolName}...`, 'info');
+      
+      // Add API key
+      const apiKey = document.getElementById('apiKeyInput').value;
+      if (apiKey) params.apiKey = apiKey;
+      
+      try {
+        const res = await fetch(`${API_BASE}/mcp/${currentServer}/tools/${toolName}`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey || ''
+          },
+          body: JSON.stringify(params)
+        });
+        
+        const data = await res.json();
+        const success = res.ok && !data.error;
+        
+        if (success) {
+          addChatMessage('assistant', `✅ **Success!**\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``);
+          log(`${toolName}: Success`, 'success');
+        } else {
+          addChatMessage('assistant', `❌ **Error:**\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``);
+          log(`${toolName}: Failed`, 'error');
+        }
+      } catch (err) {
+        addChatMessage('assistant', `❌ **Network Error:** ${err.message}`);
+        log(`${toolName} error: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send →';
+      }
+    }
+
+    // URL params handling
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return { server: params.get('server'), apiKey: params.get('apiKey') };
+    }
+
+    window.onload = async function() {
+      await loadServers();
+      
+      const { server, apiKey } = getUrlParams();
+      if (apiKey) document.getElementById('apiKeyInput').value = apiKey;
+      if (server) {
+        document.getElementById('serverSelect').value = server;
+        if (document.getElementById('serverSelect').value === server) {
+          loadServerTools();
+        }
+      }
+    };
+  </script>
+</body>
+</html>

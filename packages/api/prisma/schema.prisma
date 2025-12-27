@@ -10,7 +10,7 @@ datasource db {
 }
 
 // ============================================
-// EXISTING MODELS (From your database)
+// CORE MODELS
 // ============================================
 
 model Agent {
@@ -23,8 +23,9 @@ model Agent {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  mcpServers    MCPServer[]
-  executions    Execution[]
+  mcpServers      MCPServer[]
+  executions      Execution[]
+  erc8004Registry ERC8004Registry[] // NEW
   
   @@index([walletAddress])
   @@index([onChainId])
@@ -34,9 +35,30 @@ model Agent {
 model MCPServer {
   id              String   @id @default(uuid())
   agentId         String   @map("agent_id")
-  name            String
+  name            String   @unique
+  displayName     String?  @map("display_name")
   description     String
   endpoint        String
+  
+  // Production Config Fields
+  baseUrl         String?  @map("base_url")     // External API base URL
+  authType        String   @default("apiKey") @map("auth_type")  // apiKey, oauth, bearer, none
+  authConfig      Json?    @map("auth_config")  // { headerName: "X-API-Key", paramName: "key" }
+  version         Int      @default(1)
+  
+  // Ownership & Visibility
+  ownerId         String?  @map("owner_id")     // User who created this server
+  visibility      Visibility @default(DRAFT)    // DRAFT, PRIVATE, PUBLIC
+  publishedAt     DateTime? @map("published_at") // When moved to PUBLIC
+  
+  // ERC-8004 FIELDS
+  provider        String?
+  category        String?
+  walletAddress   String?  @map("wallet_address")
+  status          ServerStatus @default(ACTIVE)
+  handlerType     HandlerType @default(INTERNAL) @map("handler_type")
+  handlerConfig   Json?    @map("handler_config")
+  
   totalEarnings   Decimal  @default(0) @map("total_earnings") @db.Decimal(18, 6)
   callCount       Int      @default(0) @map("call_count")
   isActive        Boolean  @default(true) @map("is_active")
@@ -44,13 +66,21 @@ model MCPServer {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  owner           User?    @relation("OwnedServers", fields: [ownerId], references: [id])
   tools           Tool[]
   executions      Execution[]
   transactions    Transaction[]
   toolCalls       MCPToolCall[]
+  erc8004Registry ERC8004Registry?
+  mcpTransactions MCPTransaction[]
+  x402Payments    X402Payment[]
 
   @@index([agentId])
   @@index([endpoint])
+  @@index([category])
+  @@index([status])
+  @@index([ownerId])
+  @@index([visibility])
   @@map("mcp_servers")
 }
 
@@ -60,20 +90,115 @@ model Tool {
   name         String
   description  String
   baseCost     Decimal  @map("base_cost") @db.Decimal(10, 6)
+  
+  // Production Config Fields  
+  httpMethod   String   @default("GET") @map("http_method")  // GET, POST, PUT, DELETE
+  path         String?  // API path like /v1/places/search
+  paramMapping Json?    @map("param_mapping")  // Maps MCP params to API params
+  
+  // ERC-8004 FIELDS
+  costUsd      Decimal  @default(0.01) @map("cost_usd") @db.Decimal(10, 6)
+  callCount    Int      @default(0) @map("call_count")
+  
   inputSchema  Json     @map("input_schema")
   outputSchema Json?    @map("output_schema")
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  mcpServer    MCPServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
-  executions   Execution[]
-  toolCalls    MCPToolCall[]
+  mcpServer      MCPServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  executions     Execution[]
+  toolCalls      MCPToolCall[]
+  mcpTransactions MCPTransaction[]
 
   @@unique([mcpServerId, name])
   @@index([mcpServerId])
   @@map("tools")
 }
+
+// ============================================
+// ERC-8004 MODELS (NEW)
+// ============================================
+
+model ERC8004Registry {
+  id              String   @id @default(uuid())
+  serverId        String   @unique @map("server_id")
+  agentAddress    String   @map("agent_address")
+  metadataUri     String?  @map("metadata_uri")
+  capabilities    Json?
+  paymentProtocol String   @default("X402") @map("payment_protocol")
+  chainId         Int      @default(1) @map("chain_id")
+  registeredAt    DateTime @default(now()) @map("registered_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  server          MCPServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentAddress], references: [walletAddress])
+
+  @@index([agentAddress])
+  @@index([chainId])
+  @@map("erc8004_registry")
+}
+
+model MCPTransaction {
+  id             String   @id @default(uuid())
+  serverId       String   @map("server_id")
+  toolId         String?  @map("tool_id")
+  toolName       String   @map("tool_name")
+  userAddress    String?  @map("user_address")
+  costUsd        Decimal  @map("cost_usd") @db.Decimal(10, 6)
+  status         String   @default("completed")
+  requestParams  Json?    @map("request_params")
+  responseData   Json?    @map("response_data")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  server         MCPServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  tool           Tool?     @relation(fields: [toolId], references: [id])
+
+  @@index([serverId])
+  @@index([toolId])
+  @@index([userAddress])
+  @@index([createdAt])
+  @@map("mcp_transactions")
+}
+
+// ============================================
+// X402 PAYMENT MODEL (USDC on Base Sepolia)
+// ============================================
+
+model X402Payment {
+  id              String   @id @default(uuid())
+  txHash          String?  @unique @map("tx_hash")
+  nonce           String   @unique
+  payerAddress    String   @map("payer_address")
+  payeeAddress    String   @map("payee_address")
+  amount          Decimal  @db.Decimal(18, 6)  // USDC amount (6 decimals)
+  amountRaw       String   @map("amount_raw")  // Raw amount in smallest unit
+  toolName        String   @map("tool_name")
+  mcpServerId     String   @map("mcp_server_id")
+  signature       String   @db.Text
+  chainId         Int      @default(84532) @map("chain_id")  // Base Sepolia
+  assetAddress    String   @default("0x036CbD53842c5426634e7929541eC2318f3dCF7e") @map("asset_address")  // USDC
+  status          PaymentStatus @default(PENDING)
+  validAfter      DateTime @map("valid_after")
+  validBefore     DateTime @map("valid_before")
+  createdAt       DateTime @default(now()) @map("created_at")
+  verifiedAt      DateTime? @map("verified_at")
+  settledAt       DateTime? @map("settled_at")
+  errorMessage    String?  @map("error_message")
+  
+  mcpServer       MCPServer @relation(fields: [mcpServerId], references: [id])
+
+  @@index([payerAddress])
+  @@index([payeeAddress])
+  @@index([mcpServerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("x402_payments")
+}
+
+// ============================================
+// EXISTING MODELS (Unchanged)
+// ============================================
 
 model Execution {
   id              String   @id @default(uuid())
@@ -125,10 +250,6 @@ model WalletConfig {
   @@map("wallet_config")
 }
 
-// ============================================
-// BLOCKCHAIN INTEGRATION MODELS
-// ============================================
-
 model User {
   id            String        @id @default(uuid())
   walletAddress String        @unique @map("wallet_address")
@@ -141,9 +262,44 @@ model User {
   transactions  Transaction[]
   toolCalls     MCPToolCall[]
   preferences   UserPreference?
+  ownedServers  MCPServer[]   @relation("OwnedServers")
+  notebooks     Notebook[]
   
   @@index([walletAddress])
   @@map("users")
+}
+
+// ============================================
+// GEMINI FILE SEARCH - NOTEBOOKS & SOURCES
+// ============================================
+
+model Notebook {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources     Source[]
+  
+  @@index([userId])
+  @@map("notebooks")
+}
+
+model Source {
+  id          String   @id @default(uuid())
+  notebookId  String   @map("notebook_id")
+  type        String   // file, website, youtube, text
+  name        String
+  content     String   @db.Text
+  url         String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  notebook    Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  
+  @@index([notebookId])
+  @@map("sources")
 }
 
 model Transaction {
@@ -264,10 +420,6 @@ model ServerAnalytics {
   @@index([date])
   @@map("server_analytics")
 }
-
-// ============================================
-// AI AGENT & LEARNING MODELS (NEW)
-// ============================================
 
 model ChatLog {
   id          String   @id @default(uuid())
@@ -396,3 +548,126 @@ enum TransactionStatus {
   FAILED
   REVERTED
 }
+
+enum ServerStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  MAINTENANCE
+}
+
+enum HandlerType {
+  INTERNAL
+  EXTERNAL_API
+  WEBHOOK
+  ORCHESTRATOR
+}
+
+enum Visibility {
+  DRAFT       // Only owner can see (development/testing)
+  PRIVATE     // Only owner can see (permanently private)
+  PUBLIC      // All users can see (production)
+}
+
+// ============================================
+// LEARNING & ANALYTICS MODELS
+// ============================================
+
+model LocationSearchLog {
+  id              String   @id @default(uuid())
+  query           String
+  queryEmbedding  Json?    @map("query_embedding")
+  parsedQuery     Json?    @map("parsed_query")
+  location        String?
+  results         Json?
+  resultCount     Int      @default(0) @map("result_count")
+  userId          String?  @map("user_id")
+  selectedPlaceId String?  @map("selected_place_id")
+  feedback        String?  // positive, negative
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("location_search_logs")
+}
+
+model ToolExecutionLog {
+  id            String   @id @default(uuid())
+  serverId      String   @map("server_id")
+  serverName    String   @map("server_name")
+  toolName      String   @map("tool_name")
+  success       Boolean
+  latencyMs     Int      @map("latency_ms")
+  errorMessage  String?  @map("error_message")
+  userId        String?  @map("user_id")
+  query         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([serverId])
+  @@index([serverName])
+  @@index([createdAt])
+  @@map("tool_execution_logs")
+}
+
+model RoutingHistory {
+  id              String   @id @default(uuid())
+  query           String
+  queryEmbedding  Json?    @map("query_embedding")
+  routes          Json     // [{ server, tool, params }]
+  success         Boolean
+  feedback        String?  // positive, negative
+  userId          String?  @map("user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("routing_history")
+}
+
+// ============================================
+// API KEY MANAGEMENT (for MCP Servers)
+// ============================================
+
+model ApolloApiKey {
+  id                    String   @id @default(uuid())
+  userWalletAddress     String   @map("user_wallet_address") // User who owns this API key
+  mcpServerWalletAddress String  @map("mcp_server_wallet_address") // MCP server this key is for
+  mcpServerName         String   @map("mcp_server_name") // e.g., "Apollo", "Google Maps"
+  encryptedKey          String   @map("encrypted_key") @db.Text // Encrypted API key
+  keyName               String?  @map("key_name") // Optional name
+  isActive              Boolean  @default(true) @map("is_active")
+  lastUsedAt            DateTime? @map("last_used_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@unique([userWalletAddress, mcpServerWalletAddress]) // One key per user per MCP server
+  @@index([userWalletAddress])
+  @@index([mcpServerWalletAddress])
+  @@index([isActive])
+  @@map("apollo_api_keys")
+}
+
+// ============================================
+// X402 PAYMENT TRANSACTIONS
+// ============================================
+
+model X402Transaction {
+  id              String   @id @default(uuid())
+  userWallet      String   @map("user_wallet")
+  serverWallet    String   @map("server_wallet")
+  toolName        String   @map("tool_name")
+  mcpServerId     String   @map("mcp_server_id")
+  amount          Decimal  @map("amount") @db.Decimal(18, 6)
+  txHash          String   @unique @map("tx_hash")
+  chainId         Int      @map("chain_id")
+  status          String   @map("status") // pending, confirmed, failed
+  timestamp       DateTime @default(now()) @map("timestamp")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([userWallet])
+  @@index([serverWallet])
+  @@index([txHash])
+  @@index([status])
+  @@map("x402_transactions")
+}
+

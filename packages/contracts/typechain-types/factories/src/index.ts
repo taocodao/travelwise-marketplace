@@ -2,3 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export { AgentRegistry__factory } from "./AgentRegistry__factory";
+export { MCPPaymentProcessor__factory } from "./MCPPaymentProcessor__factory";
+export { MockUSDC__factory } from "./MockUSDC__factory";

@@ -2,3 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { AgentRegistry } from "./AgentRegistry";
+export type { MCPPaymentProcessor } from "./MCPPaymentProcessor";
+export type { MockUSDC } from "./MockUSDC";
