@@ -4,7 +4,7 @@ FROM ghcr.io/puppeteer/puppeteer:24.4.0
 # Set environment variables
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+# Let Puppeteer auto-detect Chrome from the bundled installation
 # Increase Node.js memory limit to prevent OOM crashes
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
